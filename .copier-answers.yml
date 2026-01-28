@@ -1,0 +1,19 @@
+# Changes here will be overwritten by Copier.
+_commit: 1.11.2
+_src_path: gh:pawamoy/copier-uv
+author_email: davide.crucitti@grheco.com
+author_fullname: Davide Crucitti
+author_username: davide-grheco
+copyright_date: '2026'
+copyright_holder: Davide Crucitti
+copyright_holder_email: davide.crucitti@grheco.com
+copyright_license: EUPL-1.2
+project_description: Optimize GBSA calculations for speed
+project_name: GBSA pipeline
+python_package_command_line_name: gbsa-pipeline
+python_package_distribution_name: gbsa-pipeline
+python_package_import_name: gbsa_pipeline
+repository_name: gbsa-pipeline
+repository_namespace: davide-grheco
+repository_provider: github.com
+
