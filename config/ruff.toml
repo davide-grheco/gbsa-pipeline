@@ -26,6 +26,10 @@ select = [
     "YTT",
 ]
 ignore = [
+    "PT005", # Test fixture underscore
+    "COM812",  # formatter conflict
+    "ISC001",  # formatter conflict
+    "ARG001",  # false positives in task runners
     "A001",  # Variable is shadowing a Python builtin
     "ANN101",  # Missing type annotation for self
     "ANN102",  # Missing type annotation for cls
