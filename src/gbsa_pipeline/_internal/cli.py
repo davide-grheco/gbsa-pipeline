@@ -34,8 +34,12 @@ def get_parser() -> argparse.ArgumentParser:
         An argparse parser.
     """
     parser = argparse.ArgumentParser(prog="gbsa-pipeline")
-    parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {debug._get_version()}")
-    parser.add_argument("--debug-info", action=_DebugInfo, help="Print debug information.")
+    parser.add_argument(
+        "-V", "--version", action="version", version=f"%(prog)s {debug._get_version()}"
+    )
+    parser.add_argument(
+        "--debug-info", action=_DebugInfo, help="Print debug information."
+    )
     return parser
 
 

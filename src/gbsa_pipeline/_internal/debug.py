@@ -79,13 +79,18 @@ def _get_debug_info() -> _Environment:
     """
     py_name, py_version = _interpreter_name_version()
     packages = ["gbsa-pipeline"]
-    variables = ["PYTHONPATH", *[var for var in os.environ if var.startswith("GBSA_PIPELINE")]]
+    variables = [
+        "PYTHONPATH",
+        *[var for var in os.environ if var.startswith("GBSA_PIPELINE")],
+    ]
     return _Environment(
         interpreter_name=py_name,
         interpreter_version=py_version,
         interpreter_path=sys.executable,
         platform=platform.platform(),
-        variables=[_Variable(var, val) for var in variables if (val := os.getenv(var))],  # ty: ignore[invalid-argument-type]
+        variables=[
+            _Variable(var, val) for var in variables if (val := os.getenv(var))
+        ],  # ty: ignore[invalid-argument-type]
         packages=[_Package(pkg, _get_version(pkg)) for pkg in packages],
     )
 

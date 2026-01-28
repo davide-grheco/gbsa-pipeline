@@ -37,6 +37,7 @@ ignore = [
     "ANN401",  # Dynamically typed expressions (typing.Any) are disallowed
     "ARG005",  # Unused lambda argument
     "C901",  # Too complex
+    "COM812", # Allow no trailing commas in short cases
     "D105",  # Missing docstring in magic method
     "D417",  # Missing argument description in the docstring
     "E501",  # Line too long
