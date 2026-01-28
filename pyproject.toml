@@ -102,6 +102,9 @@ ci = [
     # YORE: EOL 3.10: Remove line.
     "tomli>=2.0; python_version < '3.11'",
 ]
+dev = [
+    "pre-commit>=4.5.1",
+]
 
 [tool.uv]
 default-groups = ["maintain", "ci", "docs"]
