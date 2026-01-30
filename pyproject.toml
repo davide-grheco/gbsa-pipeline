@@ -28,7 +28,6 @@ classifiers = [
     "Topic :: Utilities",
     "Typing :: Typed",
 ]
-dependencies = []
 
 [project.urls]
 Homepage = "https://davide-grheco.github.io/gbsa-pipeline"
