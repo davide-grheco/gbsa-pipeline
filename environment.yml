@@ -1,0 +1,18 @@
+name: gbsa-pipeline
+channels:
+  - conda-forge
+  - openbiosim
+channel_priority: strict
+dependencies:
+  - python=3.12
+  - biosimspace
+  - openff-toolkit
+  - openff-interchange
+  - openmm
+  - openmmforcefields
+  - ambertools
+  - gromacs
+  - rdkit
+  - pip
+  - pip:
+      - uv
