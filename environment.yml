@@ -13,6 +13,7 @@ dependencies:
   - ambertools
   - gromacs
   - rdkit
+  - pytest
   - pip
   - pip:
       - uv
