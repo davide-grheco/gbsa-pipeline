@@ -10,7 +10,7 @@ def preparing_protocol(nsteps: int):
     return BSS.Protocol.Minimisation(steps=nsteps)
 
 
-def setting_process(protocol, solvated: BSS._SireWrappers.System):
+def setting_minimization(protocol, solvated: BSS._SireWrappers.System):
     """Run minimisation and return the minimised system."""
     min_process = BSS.MD.run(
         solvated,
@@ -25,7 +25,12 @@ def setting_process(protocol, solvated: BSS._SireWrappers.System):
 
 
 def run_minimization(nsteps: int, solvated: BSS._SireWrappers.System):
-    """Convenience wrapper: build protocol + run minimisation."""
+
     protocol = preparing_protocol(nsteps)
-    minimised_system = setting_process(protocol, solvated)
-    return minimised_system
+    min_process = BSS.Process.Gromacs(protocol, solvated)
+
+    min_process.start()
+    min_process.wait()
+    minimized = min_process.getSystem()
+
+    return minimized
