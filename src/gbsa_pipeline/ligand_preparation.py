@@ -20,7 +20,7 @@ def load_ligand_sdf(sdf_path: PathLike) -> Chem.Mol:
 
 
 def ligand_standardizer(mol: Chem.Mol) -> Chem.Mol:
-    """Standardize a ligand and add hydrogens using MolVS."""
+    """Standardize a ligand with MolVS and add hydrogens using RDKit."""
     s = Standardizer()
     mol = s.standardize(mol)
     mol = Chem.AddHs(mol, addCoords=True)
@@ -28,8 +28,13 @@ def ligand_standardizer(mol: Chem.Mol) -> Chem.Mol:
 
 
 def ligand_converter(sdf_path: PathLike) -> sr.mol:
-    """Converting sdf ligandto sire format"""
+    """
+    Read a BioSimSpace ligand from SDF after standardization and hydrogenation
+
+    Standardize with MolVS and hydrogenate with RDKit
+    """
     mol = load_ligand_sdf(sdf_path)
     mol_standard = ligand_standardizer(mol)
 
-    return sr.convert.to(mol_standard, "sire")
+    sire_mol = sr.convert.to(mol_standard, "sire")
+    return sr.convert.to(sire_mol, "BioSimSpace")
