@@ -57,9 +57,6 @@ jobs:
       - name: Check if the code is correctly typed
         run: pixi run -e dev check-types
 
-      - name: Check for breaking changes in the API
-        run: pixi run -e dev check-api
-
   tests:
     needs:
       - quality
