@@ -5,7 +5,7 @@ build-backend = "pdm.backend"
 [project]
 name = "gbsa-pipeline"
 description = "Optimize GBSA calculations for speed"
-authors = [{name = "Davide Crucitti", email = "davide.crucitti@grheco.com"}]
+authors = [{ name = "Davide Crucitti", email = "davide.crucitti@grheco.com" }]
 license = "EUPL-1.2"
 license-files = ["LICENSE"]
 readme = "README.md"
@@ -28,7 +28,7 @@ classifiers = [
     "Topic :: Utilities",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = ["molvs>=0.1.1,<0.2", "pre-commit>=4.5.1,<5"]
 
 [project.urls]
 Homepage = "https://davide-grheco.github.io/gbsa-pipeline"
@@ -67,7 +67,7 @@ source-includes = [
 # Depending on the installation tool, they will be accessible to users.
 # pipx supports it, uv does not yet, see https://github.com/astral-sh/uv/issues/4731.
 data = [
-    {path = "share/**/*", relative-to = "."},
+    { path = "share/**/*", relative-to = "." },
 ]
 
 [dependency-groups]
@@ -88,7 +88,7 @@ ci = [
     "types-markdown>=3.6",
     "types-pyyaml>=6.0",
 ]
- docs = [
+docs = [
     "markdown-callouts>=0.4",
     "markdown-exec>=1.8",
     "mkdocs>=1.6",
@@ -106,5 +106,33 @@ dev = [
     "pre-commit>=4.5.1",
 ]
 
-[tool.uv]
-default-groups = ["maintain", "ci", "docs"]
+[tool.pixi.workspace]
+channels = ["conda-forge", "openbiosim"]
+platforms = ["linux-64"]
+
+[tool.pixi.dependencies]
+biosimspace = ">=2025.3.0,<2026"
+pixi-pycharm = ">=0.0.10,<0.0.11"
+ambertools = ">=24.8,<25"
+gromacs = ">=2025.4,<2026"
+
+[tool.pixi.pypi-dependencies]
+gbsa-pipeline = { path = ".", editable = true }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+maintain = { features = ["maintain"], solve-group = "default" }
+ci = { features = ["ci"], solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+
+all = { features = ["maintain", "ci", "docs", "dev"], solve-group = "default" }
+
+[tool.pixi.tasks]
+pytest = "pytest"
+ruff = "ruff check ."
+mypy = "mypy src"
+
+[tool.pytest.ini_options]
+addopts = "--cov=src --cov-report html"
+#testpaths = "tests"
