@@ -21,8 +21,8 @@ PYTHON_DEV = "3.15"
 def shell(cmd: str, *, capture_output: bool = False, **kwargs: Any) -> str | None:
     """Run a shell command."""
     if capture_output:
-        return subprocess.check_output(cmd, shell=True, text=True, **kwargs)  # noqa: S602
-    subprocess.run(cmd, shell=True, check=True, stderr=subprocess.STDOUT, **kwargs)  # noqa: S602
+        return subprocess.check_output(cmd, shell=True, text=True, **kwargs)  # noqa
+    subprocess.run(cmd, shell=True, check=True, stderr=subprocess.STDOUT, **kwargs)  # noqa
     return None
 
 
@@ -40,9 +40,7 @@ def environ(**kwargs: str) -> Iterator[None]:
 
 def uv_install(venv: Path) -> None:
     """Install dependencies using uv."""
-    with environ(
-        UV_PROJECT_ENVIRONMENT=str(venv), PYO3_USE_ABI3_FORWARD_COMPATIBILITY="1"
-    ):
+    with environ(UV_PROJECT_ENVIRONMENT=str(venv), PYO3_USE_ABI3_FORWARD_COMPATIBILITY="1"):
         if "CI" in os.environ:
             shell("uv sync --no-editable")
         else:
@@ -52,9 +50,7 @@ def uv_install(venv: Path) -> None:
 def setup() -> None:
     """Setup the project."""
     if not shutil.which("uv"):
-        raise ValueError(
-            "make: setup: uv must be installed, see https://github.com/astral-sh/uv"
-        )
+        raise ValueError("make: setup: uv must be installed, see https://github.com/astral-sh/uv")
 
     print("Installing dependencies (default environment)")
     default_venv = Path(".venv")

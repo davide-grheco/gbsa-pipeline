@@ -1,29 +1,35 @@
-#!/usr/bin/env python3
-# param_to_gromacs.py.
+"""Performing first MD Run.
+
+We start from SDF file, read ligand, standardize and hydrogen it;
+We load protein;
+We parametrize ligand and load the protein force field parameters;
+We add solvent of a chosen water model and counter ions;
+We minimize the system;
+We perform equilibration with restraints by stepwise heating the system from 0 to 300 K.
+"""
 
 from __future__ import annotations
 
+import argparse
 import logging
+import time
 from pathlib import Path
 
 import BioSimSpace as BSS
-import argparse, time, logging
 
 from gbsa_pipeline.equilibration import run_heating
 from gbsa_pipeline.ligand_preparation import ligand_converter
+from gbsa_pipeline.minimization import run_minimization
 from gbsa_pipeline.parametrization import load_and_parameterise
 from gbsa_pipeline.solvation_box import run_solvation
-from gbsa_pipeline.minimization import run_minimization
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(
         description="Performs parametrization and minimization of protein (AMBER) + ligand (GAFF2) with BioSimSpace"
     )
     p.add_argument("protein_pdb", type=Path, help="Protein PDB path")
-    p.add_argument(
-        "ligand_sdf", type=Path, help="Ligand SDF path (3D coordinates recommended)"
-    )
+    p.add_argument("ligand_sdf", type=Path, help="Ligand SDF path (3D coordinates recommended)")
 
     p.add_argument(
         "--protein-ff",
@@ -106,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
 
     logging.info("We are done with minimization!")
 
-    BSS.IO.saveMolecules("minimized.pdb", minimized, fileformat="PDB"
+    BSS.IO.saveMolecules("minimized.pdb", minimized, fileformat="PDB")
 
     t0 = time.time()
     equilibrated_system = run_heating(500 * BSS.Units.Time.picosecond, minimized)
@@ -115,8 +121,8 @@ def main(argv: list[str] | None = None) -> int:
     t1 = time.time()
     BSS.IO.saveMolecules("equilibrated.pdb", equilibrated_system, fileformat="PDB")
 
-    logging.info("Heating done(%.1fs)", time.time() - t1)")
+    logging.info("Heating done(%.1fs)", time.time() - t1)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

@@ -1,13 +1,17 @@
-# Preparing minimization protocol and running
+"""Preparing minimization protocol and running."""
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import BioSimSpace as BSS
-import sire
+
+if TYPE_CHECKING:
+    import sire
 
 
-def run_minimization(nsteps: int, system: sire.System, engine: str = "GROMACS"):
-
+def run_minimization(nsteps: int, system: sire.System, engine: str = "GROMACS") -> BSS.System:
+    """Preopare a minimization protocoll by selecting maximal number of steps and engine."""
     protocol = BSS.Protocol.Minimisation(steps=nsteps)
     process = BSS.MD.run(
         system,

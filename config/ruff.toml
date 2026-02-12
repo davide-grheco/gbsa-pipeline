@@ -26,55 +26,58 @@ select = [
     "YTT",
 ]
 ignore = [
-    "N817",    # CamelCase
+    "PGH004", # Allow generic linting override
+    "PT011", # Allow generic OSError in tests
+    "RET504", # Allow naming return variables
+    "N817", # CamelCase
     "PT005", # Test fixture underscore
-    "COM812",  # formatter conflict
-    "ISC001",  # formatter conflict
-    "ARG001",  # false positives in task runners
-    "A001",  # Variable is shadowing a Python builtin
-    "ANN101",  # Missing type annotation for self
-    "ANN102",  # Missing type annotation for cls
-    "ANN204",  # Missing return type annotation for special method __str__
-    "ANN401",  # Dynamically typed expressions (typing.Any) are disallowed
-    "ARG005",  # Unused lambda argument
-    "C901",  # Too complex
+    "COM812", # formatter conflict
+    "ISC001", # formatter conflict
+    "ARG001", # false positives in task runners
+    "A001", # Variable is shadowing a Python builtin
+    "ANN101", # Missing type annotation for self
+    "ANN102", # Missing type annotation for cls
+    "ANN204", # Missing return type annotation for special method __str__
+    "ANN401", # Dynamically typed expressions (typing.Any) are disallowed
+    "ARG005", # Unused lambda argument
+    "C901", # Too complex
     "COM812", # Allow no trailing commas in short cases
-    "D105",  # Missing docstring in magic method
-    "D417",  # Missing argument description in the docstring
-    "E501",  # Line too long
-    "ERA001",  # Commented out code
-    "G004",  # Logging statement uses f-string
-    "PLR0911",  # Too many return statements
-    "PLR0912",  # Too many branches
-    "PLR0913",  # Too many arguments to function call
-    "PLR0915",  # Too many statements
+    "D105", # Missing docstring in magic method
+    "D417", # Missing argument description in the docstring
+    "E501", # Line too long
+    "ERA001", # Commented out code
+    "G004", # Logging statement uses f-string
+    "PLR0911", # Too many return statements
+    "PLR0912", # Too many branches
+    "PLR0913", # Too many arguments to function call
+    "PLR0915", # Too many statements
     "SLF001", # Private member accessed
-    "TRY003",  # Avoid specifying long messages outside the exception class
+    "TRY003", # Avoid specifying long messages outside the exception class
 ]
 
 [lint.per-file-ignores]
 "src/**/cli.py" = [
-    "T201",  # Print statement
+    "T201", # Print statement
 ]
 "src/*/debug.py" = [
-    "T201",  # Print statement
+    "T201", # Print statement
 ]
 "!src/*/*.py" = [
-    "D100",  # Missing docstring in public module
+    "D100", # Missing docstring in public module
 ]
 "!src/**.py" = [
-    "D101",  # Missing docstring in public class
-    "D103",  # Missing docstring in public function
+    "D101", # Missing docstring in public class
+    "D103", # Missing docstring in public function
 ]
 "scripts/*.py" = [
-    "INP001",  # File is part of an implicit namespace package
-    "T201",  # Print statement
+    "INP001", # File is part of an implicit namespace package
+    "T201", # Print statement
 ]
 "tests/**.py" = [
-    "ARG005",  # Unused lambda argument
-    "FBT001",  # Boolean positional arg in function definition
-    "PLR2004",  # Magic value used in comparison
-    "S101",  # Use of assert detected
+    "ARG005", # Unused lambda argument
+    "FBT001", # Boolean positional arg in function definition
+    "PLR2004", # Magic value used in comparison
+    "S101", # Use of assert detected
 ]
 
 [lint.flake8-quotes]

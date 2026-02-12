@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import BioSimSpace as BSS
 
-from src.gbsa_pipeline.parametrization import load_protein_pdb
-from src.gbsa_pipeline.parametrization import parameterise_protein_amber
+from src.gbsa_pipeline.parametrization import load_protein_pdb, parameterise_protein_amber
 from src.gbsa_pipeline.solvation_box import run_solvation
 
 

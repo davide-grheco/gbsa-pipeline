@@ -1,10 +1,13 @@
+"""Reading ligand from SDF file, standardizing with MolVS and adding hydrogens with RDKIT."""
+
 from os import PathLike
+
 import sire as sr
 from molvs import Standardizer
 from rdkit import Chem
 
 
-def load_ligand_sdf(sdf_path: PathLike) -> Chem.Mol:
+def load_ligand_sdf(sdf_path: PathLike | str) -> Chem.Mol:
     """Load the first molecule from an SDF file.
 
     NOTE: RDKit reads a list of molecules from an SDF file.
@@ -20,18 +23,17 @@ def load_ligand_sdf(sdf_path: PathLike) -> Chem.Mol:
 
 
 def ligand_standardizer(mol: Chem.Mol) -> Chem.Mol:
-    """Standardize a ligand with MolVS and add hydrogens using RDKit."""
+    """Standardize a ligand with MolVS and add hydrogen using RDKit."""
     s = Standardizer()
     mol = s.standardize(mol)
     mol = Chem.AddHs(mol, addCoords=True)
     return mol
 
 
-def ligand_converter(sdf_path: PathLike) -> sr.mol:
-    """
-    Read a BioSimSpace ligand from SDF after standardization and hydrogenation
+def ligand_converter(sdf_path: PathLike | str) -> sr.mol:
+    """Read a BioSimSpace ligand from SDF after standardization and hydrogenation.
 
-    Standardize with MolVS and hydrogenate with RDKit
+    Standardize with MolVS and hydrogenate with RDKit.
     """
     mol = load_ligand_sdf(sdf_path)
     mol_standard = ligand_standardizer(mol)
