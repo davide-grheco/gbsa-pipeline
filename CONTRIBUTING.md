@@ -10,29 +10,21 @@ Fork and clone the repository, then:
 
 ```bash
 cd gbsa-pipeline
-make setup
+pixi install -e dev
+pixi run -e dev pre-commit-install
 ```
 
-> NOTE: If it fails for some reason, you'll need to install [uv](https://github.com/astral-sh/uv) manually.
->
-> You can install it with:
->
-> ```bash
-> curl -LsSf https://astral.sh/uv/install.sh | sh
-> ```
->
-> Now you can try running `make setup` again, or simply `uv sync`.
+You now have the dependencies installed in a pixi environment. Common commands:
 
-You now have the dependencies installed.
-
-You can run the application with `make run gbsa-pipeline [ARGS...]`.
-
-Run `make help` to see all the available actions!
+- Run the app: `pixi run -e dev gbsa-pipeline [ARGS...]`
+- Format: `pixi run -e dev format`
+- Checks: `pixi run -e dev check`
+- Tests: `pixi run -e dev test`
+- Pre-commit (all files): `pixi run -e dev pre-commit-run`
 
 ## Tasks
 
-The entry-point to run commands and tasks is the `make` Python script, located in the `scripts` directory. Try running `make` to show the available commands and tasks. The *commands* do not need the Python dependencies to be installed,
-while the *tasks* do. The cross-platform tasks are written in Python, thanks to [duty](https://github.com/pawamoy/duty).
+Commands and tasks are exposed through pixi (see `pyproject.toml` under `tool.pixi.tasks`). The cross-platform tasks are written in Python, thanks to [duty](https://github.com/pawamoy/duty).
 
 If you work in VSCode, we provide [an action to configure VSCode](https://pawamoy.github.io/copier-uv/work/#vscode-setup) for the project.
 
@@ -45,11 +37,11 @@ As usual:
 
 **Before committing:**
 
-1. run `make format` to auto-format the code
-1. run `make check` to check everything (fix any warning)
-1. run `make test` to run the tests (fix any issue)
+1. run `pixi run -e dev format` to auto-format the code
+1. run `pixi run -e dev check` to check everything (fix any warning)
+1. run `pixi run -e dev test` to run the tests (fix any issue)
 1. if you updated the documentation or the project dependencies:
-    1. run `make docs`
+    1. run `pixi run -e dev docs`
     1. go to http://localhost:8000 and check that everything looks good
 1. follow our [commit message convention](#commit-message-convention)
 
