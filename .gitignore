@@ -16,6 +16,8 @@
 /htmlcov/
 /site/
 uv.lock
+.pixi/
+.pixi
 
 # cache
 .cache/

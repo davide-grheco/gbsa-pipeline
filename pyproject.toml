@@ -5,7 +5,7 @@ build-backend = "pdm.backend"
 [project]
 name = "gbsa-pipeline"
 description = "Optimize GBSA calculations for speed"
-authors = [{name = "Davide Crucitti", email = "davide.crucitti@grheco.com"}]
+authors = [{ name = "Davide Crucitti", email = "davide.crucitti@grheco.com" }]
 license = "EUPL-1.2"
 license-files = ["LICENSE"]
 readme = "README.md"
@@ -28,7 +28,7 @@ classifiers = [
     "Topic :: Utilities",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = ["molvs>=0.1.1,<0.2", "pre-commit>=4.5.1,<5"]
 
 [project.urls]
 Homepage = "https://davide-grheco.github.io/gbsa-pipeline"
@@ -67,17 +67,50 @@ source-includes = [
 # Depending on the installation tool, they will be accessible to users.
 # pipx supports it, uv does not yet, see https://github.com/astral-sh/uv/issues/4731.
 data = [
-    {path = "share/**/*", relative-to = "."},
+    { path = "share/**/*", relative-to = "." },
 ]
 
+[tool.pixi.workspace]
+channels = ["conda-forge", "openbiosim"]
+platforms = ["linux-64"]
+
+[tool.pixi.dependencies]
+biosimspace = ">=2025.3.0,<2026"
+pixi-pycharm = ">=0.0.10,<0.0.11"
+ambertools = ">=24.8,<25"
+gromacs = ">=2025.4,<2026"
+
+[tool.pixi.pypi-dependencies]
+gbsa-pipeline = { path = ".", editable = true }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+
+[tool.pixi.tasks]
+pytest = "pytest"
+ruff = "ruff check ."
+ruff-fix = "ruff check --fix ."
+mypy = "mypy src"
+format = "duty format"
+check-quality = "duty check-quality"
+check-types = "duty check-types"
+check-docs = "duty check-docs"
+check-api = "duty check-api"
+check = "duty check"
+test = "duty test"
+docs = "duty docs"
+docs-deploy = "duty docs-deploy"
+changelog = "duty changelog"
+release = "duty release"
+pre-commit-install = "pre-commit install"
+pre-commit-run = "pre-commit run --all-files"
+
+[tool.pytest.ini_options]
+addopts = "--cov=src --cov-report html"
+
 [dependency-groups]
-maintain = [
-    "build>=1.2",
-    "git-changelog>=2.5",
-    "twine>=5.1",
-    "yore>=0.3.3",
-]
-ci = [
+dev = [
     "duty>=1.6",
     "ruff>=0.4",
     "pytest>=8.2",
@@ -87,8 +120,6 @@ ci = [
     "mypy>=1.10",
     "types-markdown>=3.6",
     "types-pyyaml>=6.0",
-]
- docs = [
     "markdown-callouts>=0.4",
     "markdown-exec>=1.8",
     "mkdocs>=1.6",
@@ -98,13 +129,11 @@ ci = [
     "mkdocs-material>=9.5",
     "mkdocs-minify-plugin>=0.8",
     "mkdocs-section-index>=0.3",
-    "mkdocstrings[python]>=0.29",
-    # YORE: EOL 3.10: Remove line.
+    "mkdocstrings[python]>=1.0.3,<2",
     "tomli>=2.0; python_version < '3.11'",
-]
-dev = [
+    "build>=1.2",
+    "git-changelog>=2.5",
+    "twine>=5.1",
+    "yore>=0.3.3",
     "pre-commit>=4.5.1",
 ]
-
-[tool.uv]
-default-groups = ["maintain", "ci", "docs"]
