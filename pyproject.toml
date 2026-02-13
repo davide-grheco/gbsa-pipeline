@@ -28,7 +28,11 @@ classifiers = [
     "Topic :: Utilities",
     "Typing :: Typed",
 ]
-dependencies = ["molvs>=0.1.1,<0.2", "pre-commit>=4.5.1,<5"]
+dependencies = [
+    "molvs>=0.1.1,<0.2",
+    "pre-commit>=4.5.1,<5",
+    "meeko>=0.5,<0.6",
+]
 
 [project.urls]
 Homepage = "https://davide-grheco.github.io/gbsa-pipeline"
@@ -88,15 +92,16 @@ dev = { features = ["dev"], solve-group = "default" }
 
 [tool.pixi.tasks]
 pytest = "pytest"
-ruff = "ruff check ."
-ruff-fix = "ruff check --fix ."
+ruff = "ruff check --config config/ruff.toml ."
+ruff-fix = "ruff check --config config/ruff.toml --fix ."
 mypy = "mypy --config-file config/mypy.ini -p gbsa_pipeline -p tests"
 check-quality = "ruff check src tests --config config/ruff.toml"
 check-types = "FORCE_COLOR=1 mypy --config-file config/mypy.ini -p gbsa_pipeline -p tests"
 check-docs = "mkdir -p htmlcov && touch htmlcov/index.html && mkdocs build --strict --verbose"
 check-api = "griffe check gbsa_pipeline --search src --color --against main"
 check = "ruff check src tests --config config/ruff.toml && FORCE_COLOR=1 mypy --config-file config/mypy.ini -p gbsa_pipeline -p tests && mkdir -p htmlcov && touch htmlcov/index.html && griffe check gbsa_pipeline --search src --color --against main"
-test = "COVERAGE_FILE=.coverage PYTHONWARNDEFAULTENCODING=1 pytest tests -c config/pytest.ini -n auto --color=yes"
+test-all = "COVERAGE_FILE=.coverage PYTHONWARNDEFAULTENCODING=1 pytest tests -c config/pytest.ini -n auto --color=yes"
+test = "COVERAGE_FILE=.coverage PYTHONWARNDEFAULTENCODING=1 pytest tests -c config/pytest.ini -n auto --color=yes -m 'no integration'"
 
 docs = "mkdocs serve -a 127.0.0.1:8000"
 docs-deploy = "DEPLOY=true mkdocs gh-deploy --force"
