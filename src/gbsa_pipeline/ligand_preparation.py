@@ -1,6 +1,7 @@
 """Reading ligand from SDF file, standardizing with MolVS and adding hydrogens with RDKIT."""
 
 from os import PathLike
+from pathlib import Path
 
 import sire as sr
 from molvs import Standardizer
@@ -13,6 +14,10 @@ def load_ligand_sdf(sdf_path: PathLike | str) -> Chem.Mol:
     NOTE: RDKit reads a list of molecules from an SDF file.
     Only the first molecule is processed.
     """
+    path = Path(sdf_path)
+    if not path.exists():
+        raise OSError(f"File not found: {sdf_path}")
+
     molecule_list = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
 
     if len(molecule_list) == 0 or molecule_list[0] is None:
