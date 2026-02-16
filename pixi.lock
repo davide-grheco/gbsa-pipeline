@@ -465,18 +465,14 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-ng-2.3.3-hceb46e0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstandard-0.25.0-py312h5253ce2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
-      - pypi: https://files.pythonhosted.org/packages/18/bb/60b8d33c3a798f2cb09600a28177f41a3386edfb480ed4c7287f24f1004c/acpype-2023.10.27-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/db/3c/33bac158f8ab7f89b2e59426d5fe2e4f63f7ed25df84c036890172b412b5/cfgv-3.5.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/33/6b/e0547afaf41bf2c42e52430072fa5658766e3d65bd4b03a563d1b6336f57/distlib-0.4.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/c5/1992a25b557437e659fcd678251954251bbebd3df6eb29f1284ad4703b6d/gmx_MMPBSA-1.5.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b8/58/40fbbcefeda82364720eba5cf2270f98496bdfa19ea75b4cccae79c698e6/identify-2.6.16-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/68/91/60eab2293802b9553145bee73ba0fce52e6b9c8e785e38430d1538974a6b/lickit-0.1.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/08/dc/d948e83b97f2c420cb6c7e2143ae349560d3b5b061945f1b2a4eefb0231c/MolVS-0.1.1.tar.gz
       - pypi: https://files.pythonhosted.org/packages/ee/15/b908d1d23a4bd2bd7b2e98de5df23b26e43145119fe294728bf89211b935/mpi4py-4.1.1-cp312-cp312-manylinux1_x86_64.manylinux_2_5_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/88/b2/d0896bdcdc8d28a7fc5717c305f1a861c26e18c05047949fb371034d98bd/nodeenv-1.10.0-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/bc/79/a713470f17697b5ebee488929a88b2daaa3b20eb5be502d6c5cab9dbc4e2/openbabel_wheel-3.1.1.22-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/5d/19/fd3ef348460c80af7bb4669ea7926651d1f95c23ff2df18b9d24bab4f3fa/pre_commit-4.5.1-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/14/09/c9ea9940267764072e5e0912fa692d390a06b89896bc9ffda35ec1ce7304/unigbsa-0.1.7-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/6a/2a/dc2228b2888f51192c7dc766106cd475f1b768c10caaf9727659726f7391/virtualenv-20.36.1-py3-none-any.whl
       - pypi: ./
   dev:
@@ -944,7 +940,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-ng-2.3.3-hceb46e0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstandard-0.25.0-py312h5253ce2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
-      - pypi: https://files.pythonhosted.org/packages/18/bb/60b8d33c3a798f2cb09600a28177f41a3386edfb480ed4c7287f24f1004c/acpype-2023.10.27-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/22/09/3ad81e40d752ef51a9a8c320c9385de0d98a4dad68c0e4f793befc610f56/ansimarkup-1.5.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/37/c9/fd117a6f9300c62bbc33bc337fd2b3c6bfe28b6e9701de336b52d7a797ad/backrefs-6.1-py312-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c5/0d/84a4380f930db0010168e0aa7b7a8fed9ba1835a8fbb1472bc6d0201d529/build-1.4.0-py3-none-any.whl
@@ -980,7 +975,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/5e/73/e01e4c5e11ad0494f4407a3f623ad4d87714909f50b17a06ed121034ff6e/jsmin-3.0.1.tar.gz
       - pypi: https://files.pythonhosted.org/packages/81/db/e655086b7f3a705df045bf0933bdd9c2f79bb3c97bfef1384598bb79a217/keyring-25.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/49/d8/fc1a92a77c3020ee08ce2dc48aed4b42ab7c30fb43ce488d388673b0f164/librt-0.8.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/68/91/60eab2293802b9553145bee73ba0fce52e6b9c8e785e38430d1538974a6b/lickit-0.1.0.tar.gz
       - pypi: https://files.pythonhosted.org/packages/de/1f/77fa3081e4f66ca3576c896ae5d31c3002ac6607f9747d2e3aa49227e464/markdown-3.10.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1d/b5/7b0a0a52c82bfccd830af2a8cc8add1c5bc932e0204922434954a631dd51/markdown_callouts-0.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ea/22/7b684ddb01b423b79eaba9726954bbe559540d510abc7a72a84d8eee1b26/markdown_exec-1.12.1-py3-none-any.whl
@@ -1006,7 +1000,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/79/7b/2c79738432f5c924bef5071f933bcc9efd0473bac3b4aa584a6f7c1c8df8/mypy_extensions-1.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/6f/84/c0dc75c7fb596135f999e59a410d9f45bdabb989f1cb911f0016d22b747b/nh3-0.3.3-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/88/b2/d0896bdcdc8d28a7fc5717c305f1a861c26e18c05047949fb371034d98bd/nodeenv-1.10.0-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/bc/79/a713470f17697b5ebee488929a88b2daaa3b20eb5be502d6c5cab9dbc4e2/openbabel_wheel-3.1.1.22-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/90/96/04b8e52da071d28f5e21a805b19cb9390aa17a47462ac87f5e2696b9566d/paginate-0.5.7-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ef/3c/2c197d226f9ea224a9ab8d197933f9da0ae0aac5b6e0f884e2b8d9c8e9f7/pathspec-1.0.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl
@@ -1029,7 +1022,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/b3/c5/30de077e06f7ffc3fe21d45ce26b8088816227b678a7157f6b9e080ff2db/type_lens-0.2.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/54/c9/659fa2df04b232b0bfcd05d2418e683080e91ec68f636f3c0a5a267350e7/types_markdown-3.10.2.20260211-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/bd/e0/1eed384f02555dde685fff1a1ac805c1c7dcb6dd019c916fe659b1c1f9ec/types_pyyaml-6.0.12.20250915-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/14/09/c9ea9940267764072e5e0912fa692d390a06b89896bc9ffda35ec1ce7304/unigbsa-0.1.7-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/6a/2a/dc2228b2888f51192c7dc766106cd475f1b768c10caaf9727659726f7391/virtualenv-20.36.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b5/e8/dbf020b4d98251a9860752a094d09a65e1b436ad181faf929983f697048f/watchdog-6.0.0-py3-none-manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/c5/ce/867b1c034d48da93923a958f478e21feb5c6974a6275d04d9052f8a8bf84/yore-0.4.7-py3-none-any.whl
@@ -1057,13 +1049,6 @@ packages:
   purls: []
   size: 8191
   timestamp: 1744137672556
-- pypi: https://files.pythonhosted.org/packages/18/bb/60b8d33c3a798f2cb09600a28177f41a3386edfb480ed4c7287f24f1004c/acpype-2023.10.27-py3-none-any.whl
-  name: acpype
-  version: 2023.10.27
-  sha256: 58690dac7ba83961ab84ca995b712d55ec799bab0e4bd4d4dac794e306acee9b
-  requires_dist:
-  - openbabel-wheel>=3.1.1.19,<4.0.0.0
-  requires_python: '>=3.8,<4.0'
 - conda: https://conda.anaconda.org/conda-forge/noarch/adwaita-icon-theme-49.0-unix_0.conda
   sha256: a362b4f5c96a0bf4def96be1a77317e2730af38915eb9bec85e2a92836501ed7
   md5: b3f0179590f3c0637b7eb5309898f79e
@@ -2463,13 +2448,12 @@ packages:
   timestamp: 1770387898414
 - pypi: ./
   name: gbsa-pipeline
-  version: 0.1.dev9+g5a9266e.d20260216
-  sha256: e84f731df58269ec8e907e45f3cd40b3a8945ea28cee71647bccaebdee9a299e
+  version: 0.1.dev11+g1ea0e3d.d20260216
+  sha256: 884e8f316a080d07de55566597c52e6fce3bd345c8c1eb4da3529f714966e3e4
   requires_dist:
   - molvs>=0.1.1,<0.2
   - pre-commit>=4.5.1,<5
   - gmx-mmpbsa>=1.5.6
-  - unigbsa>=0.1.7,<0.2
   requires_python: '>=3.10'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/gdk-pixbuf-2.44.5-h2b0a6b4_0.conda
   sha256: bd61bc71e6a21f3d8e1a362310789fc329fd45eab3c66f1204249253f9abd3d0
@@ -5084,10 +5068,6 @@ packages:
   purls: []
   size: 60963
   timestamp: 1727963148474
-- pypi: https://files.pythonhosted.org/packages/68/91/60eab2293802b9553145bee73ba0fce52e6b9c8e785e38430d1538974a6b/lickit-0.1.0.tar.gz
-  name: lickit
-  version: 0.1.0
-  sha256: bb163890a1755472a9f4dae4eb1d2d6119fc1d8c8d91a07fc1d33b78d22f7a16
 - conda: https://conda.anaconda.org/conda-forge/linux-64/llvm-openmp-21.1.8-h4922eb0_0.conda
   sha256: a5a7ad16eecbe35cac63e529ea9c261bef4ccdd68cb1db247409f04529423989
   md5: f8640b709b37dc7758ddce45ea18d000
@@ -5964,11 +5944,6 @@ packages:
   purls: []
   size: 4253
   timestamp: 1575483836797
-- pypi: https://files.pythonhosted.org/packages/bc/79/a713470f17697b5ebee488929a88b2daaa3b20eb5be502d6c5cab9dbc4e2/openbabel_wheel-3.1.1.22-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-  name: openbabel-wheel
-  version: 3.1.1.22
-  sha256: bcc3d01459489334e9acf68526db48be91ce88692c59192a0d0fb9f422f2bc9a
-  requires_python: '>=3.7'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/opencl-headers-2025.06.13-h5888daf_0.conda
   sha256: 2b6ce54174ec19110e1b3c37455f7cd138d0e228a75727a9bba443427da30a36
   md5: 45c3d2c224002d6d0d7769142b29f986
@@ -7982,15 +7957,6 @@ packages:
   - pkg:pypi/unicodedata2?source=compressed-mapping
   size: 410641
   timestamp: 1770909099497
-- pypi: https://files.pythonhosted.org/packages/14/09/c9ea9940267764072e5e0912fa692d390a06b89896bc9ffda35ec1ce7304/unigbsa-0.1.7-py3-none-any.whl
-  name: unigbsa
-  version: 0.1.7
-  sha256: 7cc61f1fabc39d72277c17b387b28c01d5dd519b213747729d5adffac99c8fad
-  requires_dist:
-  - acpype
-  - gmx-mmpbsa>=1.5.6
-  - lickit
-  - tqdm
 - conda: https://conda.anaconda.org/conda-forge/noarch/uri-template-1.3.0-pyhd8ed1ab_1.conda
   sha256: e0eb6c8daf892b3056f08416a96d68b0a358b7c46b99c8a50481b22631a4dfc0
   md5: e7cb0f5745e4c5035a460248334af7eb
