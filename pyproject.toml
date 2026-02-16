@@ -28,7 +28,7 @@ classifiers = [
     "Topic :: Utilities",
     "Typing :: Typed",
 ]
-dependencies = ["molvs>=0.1.1,<0.2", "pre-commit>=4.5.1,<5"]
+dependencies = ["molvs>=0.1.1,<0.2", "pre-commit>=4.5.1,<5", "gmx-mmpbsa>=1.5.6", "unigbsa>=0.1.7,<0.2"]
 
 [project.urls]
 Homepage = "https://davide-grheco.github.io/gbsa-pipeline"
