@@ -13,8 +13,8 @@ Optimize GBSA calculations for speed
 pip install gbsa-pipeline
 ```
 
-With [`uv`](https://docs.astral.sh/uv/):
+With [`pixi`](https://pixi.sh/):
 
 ```bash
-uv tool install gbsa-pipeline
+pixi global install gbsa-pipeline
 ```

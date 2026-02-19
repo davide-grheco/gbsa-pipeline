@@ -20,11 +20,12 @@ You now have the dependencies installed in a pixi environment. Common commands:
 - Format: `pixi run -e dev format`
 - Checks: `pixi run -e dev check`
 - Tests: `pixi run -e dev test`
+- Full CI set: `pixi run -e dev ci`
 - Pre-commit (all files): `pixi run -e dev pre-commit-run`
 
 ## Tasks
 
-Commands and tasks are exposed through pixi (see `pyproject.toml` under `tool.pixi.tasks`). The cross-platform tasks are written in Python, thanks to [duty](https://github.com/pawamoy/duty).
+Commands and tasks are exposed through pixi (see `pyproject.toml` under `tool.pixi.tasks`).
 
 If you work in VSCode, we provide [an action to configure VSCode](https://pawamoy.github.io/copier-uv/work/#vscode-setup) for the project.
 
