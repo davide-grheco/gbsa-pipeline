@@ -938,7 +938,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-ng-2.3.3-hceb46e0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstandard-0.25.0-py312h5253ce2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
-      - pypi: https://files.pythonhosted.org/packages/22/09/3ad81e40d752ef51a9a8c320c9385de0d98a4dad68c0e4f793befc610f56/ansimarkup-1.5.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/37/c9/fd117a6f9300c62bbc33bc337fd2b3c6bfe28b6e9701de336b52d7a797ad/backrefs-6.1-py312-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c5/0d/84a4380f930db0010168e0aa7b7a8fed9ba1835a8fbb1472bc6d0201d529/build-1.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d8/2e/fa028f325e51a37ca22099a628ef30b40fe12b9b3dbdb66b396446696267/cappa-0.31.0-py3-none-any.whl
@@ -950,9 +949,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/f1/2a/8c3ac3d8bc94e6de8d7ae270bb5bc437b210bb9d6d9e46630c98f4abd20c/csscompressor-0.9.5.tar.gz
       - pypi: https://files.pythonhosted.org/packages/33/6b/e0547afaf41bf2c42e52430072fa5658766e3d65bd4b03a563d1b6336f57/distlib-0.4.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/02/10/5da547df7a391dcde17f59520a231527b8571e6f46fc8efb02ccb370ab12/docutils-0.22.4-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/54/da/69c8dc76088584eae227d6ec3e682aabf972fbfe39bc037b6d6820c4529a/duty-1.9.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ab/84/02fc1827e8cdded4aa65baef11296a9bbe595c474f0d6d758af082d849fd/execnet-2.1.2-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/e8/a0/dec6c7f8e6fa37aaa91e45c7f56db964320c3e976ef04745c4e6a4369f74/failprint-1.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f7/ec/67fbef5d497f86283db54c22eec6f6140243aae73265799baaaa19cd17fb/ghp_import-2.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c8/51/fd8b4d475ec4e53d4d9cc0d74da7ae8810033a40d49f9f5dd57357038832/git_changelog-2.7.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a0/61/5c78b91c3143ed5c14207f463aecfc8f9dbb5092fb2869baf37c273b2705/gitdb-4.0.12-py3-none-any.whl
@@ -1151,20 +1148,6 @@ packages:
   - pkg:pypi/annotated-types?source=hash-mapping
   size: 18074
   timestamp: 1733247158254
-- pypi: https://files.pythonhosted.org/packages/22/09/3ad81e40d752ef51a9a8c320c9385de0d98a4dad68c0e4f793befc610f56/ansimarkup-1.5.0-py2.py3-none-any.whl
-  name: ansimarkup
-  version: 1.5.0
-  sha256: 3146ca74af5f69e48a9c3d41b31085c0d6378f803edeb364856d37c11a684acf
-  requires_dist:
-  - colorama
-  - bumpversion>=0.5.2 ; extra == 'devel'
-  - check-manifest>=0.35 ; extra == 'devel'
-  - readme-renderer>=16.0 ; extra == 'devel'
-  - flake8 ; extra == 'devel'
-  - pep8-naming ; extra == 'devel'
-  - tox>=2.6.0 ; extra == 'tests'
-  - pytest>=3.0.3 ; extra == 'tests'
-  - pytest-cov>=2.3.1 ; extra == 'tests'
 - conda: https://conda.anaconda.org/conda-forge/noarch/anyio-4.12.1-pyhcf101f3_0.conda
   sha256: eb0c4e2b24f1fbefaf96ce6c992c6bd64340bc3c06add4d7415ab69222b201da
   md5: 11a2b8c732d215d977998ccd69a9d5e8
@@ -2178,14 +2161,6 @@ packages:
   version: 0.22.4
   sha256: d0013f540772d1420576855455d050a2180186c91c15779301ac2ccb3eeb68de
   requires_python: '>=3.9'
-- pypi: https://files.pythonhosted.org/packages/54/da/69c8dc76088584eae227d6ec3e682aabf972fbfe39bc037b6d6820c4529a/duty-1.9.0-py3-none-any.whl
-  name: duty
-  version: 1.9.0
-  sha256: f538c4afc0f513fa7cb9979ab39ada05abcd62afe9c1df90768749f09f0bdbc1
-  requires_dist:
-  - failprint>=1.0.5
-  - typing-extensions>=4.0 ; python_full_version < '3.11'
-  requires_python: '>=3.10'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/epoxy-1.5.10-hb03c661_2.conda
   sha256: a5b51e491fec22bcc1765f5b2c8fff8a97428e9a5a7ee6730095fb9d091b0747
   md5: 057083b06ccf1c2778344b6dabace38b
@@ -2241,16 +2216,6 @@ packages:
   - pkg:pypi/executing?source=hash-mapping
   size: 30753
   timestamp: 1756729456476
-- pypi: https://files.pythonhosted.org/packages/e8/a0/dec6c7f8e6fa37aaa91e45c7f56db964320c3e976ef04745c4e6a4369f74/failprint-1.1.0-py3-none-any.whl
-  name: failprint
-  version: 1.1.0
-  sha256: 44a21d49b3d36056e080ab7d9abf1f2269efa49c60b663e63d4ecebbfc5090e8
-  requires_dist:
-  - ansimarkup~=1.4
-  - jinja2>=2.11,<4
-  - ptyprocess~=0.6 ; sys_platform != 'win32'
-  - typing-extensions>=4.1 ; python_full_version < '3.10'
-  requires_python: '>=3.10'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/fftw-3.3.10-nompi_h3b011a4_111.conda
   sha256: c29a9196c344620267287d6cd931f6defda13874a25f9547fc153a12f3377ade
   md5: f6612d7b30fdd5b5db1c8c39313f9787
@@ -2444,8 +2409,8 @@ packages:
   timestamp: 1770387898414
 - pypi: ./
   name: gbsa-pipeline
-  version: 0.1.dev8+gc24ba7a.d20260212
-  sha256: bdf74d023011bd4e26827085c4f19db1f8d5a41cdc9d7b9711b0e837f13fc7e7
+  version: 0.1.dev9+g5a9266e.d20260219
+  sha256: afff6a95258dfe3d7fb085aa65b274b6ed9eea1f3fcb7cd81a2f8e3e949f67ba
   requires_dist:
   - molvs>=0.1.1,<0.2
   - pre-commit>=4.5.1,<5

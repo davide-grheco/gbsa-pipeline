@@ -56,7 +56,6 @@ source-includes = [
     "scripts",
     "share",
     "tests",
-    "duties.py",
     "mkdocs.yml",
     "*.md",
     "LICENSE",
@@ -92,26 +91,25 @@ pytest = "pytest"
 ruff = "ruff check ."
 ruff-fix = "ruff check --fix ."
 mypy = "mypy src"
-format = "duty format"
-check-quality = "duty check-quality"
-check-types = "duty check-types"
-check-docs = "duty check-docs"
-check-api = "duty check-api"
-check = "duty check"
-test = "duty test"
-docs = "duty docs"
-docs-deploy = "duty docs-deploy"
-changelog = "duty changelog"
-release = "duty release"
+format = "ruff check src tests --config config/ruff.toml --fix-only --exit-zero && ruff format src tests --config config/ruff.toml"
+check-quality = "ruff check src tests --config config/ruff.toml"
+check-types = "FORCE_COLOR=1 mypy --config-file config/mypy.ini src tests"
+check-docs = "mkdir -p htmlcov && touch htmlcov/index.html && mkdocs build --strict --verbose"
+check-api = "griffe check gbsa_pipeline --search src --color --against main"
+check = "ruff check src tests --config config/ruff.toml && FORCE_COLOR=1 mypy --config-file config/mypy.ini src tests && mkdir -p htmlcov && touch htmlcov/index.html && mkdocs build --strict --verbose && griffe check gbsa_pipeline --search src --color --against main"
+test = "COVERAGE_FILE=.coverage PYTHONWARNDEFAULTENCODING=1 pytest tests -c config/pytest.ini -n auto --color=yes"
+docs = "mkdocs serve -a 127.0.0.1:8000"
+docs-deploy = "DEPLOY=true mkdocs gh-deploy --force"
+changelog = "git-changelog && yore check"
 pre-commit-install = "pre-commit install"
 pre-commit-run = "pre-commit run --all-files"
+ci = "pixi run -e dev check-docs && pixi run -e dev check-quality && pixi run -e dev check-types && pixi run -e dev test"
 
 [tool.pytest.ini_options]
 addopts = "--cov=src --cov-report html"
 
 [dependency-groups]
 dev = [
-    "duty>=1.6",
     "ruff>=0.4",
     "pytest>=8.2",
     "pytest-cov>=5.0",
