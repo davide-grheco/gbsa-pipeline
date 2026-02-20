@@ -5,7 +5,7 @@ from __future__ import annotations
 import BioSimSpace as BSS
 import pytest
 
-from src.gbsa_pipeline.ligand_preparation import (
+from gbsa_pipeline.ligand_preparation import (
     ligand_converter,
     ligand_standardizer,
     load_ligand_sdf,

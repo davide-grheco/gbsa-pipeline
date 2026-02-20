@@ -2409,8 +2409,8 @@ packages:
   timestamp: 1770387898414
 - pypi: ./
   name: gbsa-pipeline
-  version: 0.1.dev9+g5a9266e.d20260219
-  sha256: afff6a95258dfe3d7fb085aa65b274b6ed9eea1f3fcb7cd81a2f8e3e949f67ba
+  version: 0.1.dev14+gb451e00.d20260220
+  sha256: f457af718671ba5ac49c3ab0e3ab623d8eb6a4c4be324e29a08755f186791deb
   requires_dist:
   - molvs>=0.1.1,<0.2
   - pre-commit>=4.5.1,<5
