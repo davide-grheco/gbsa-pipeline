@@ -5,7 +5,7 @@ from __future__ import annotations
 import BioSimSpace as BSS
 import pytest
 
-from src.gbsa_pipeline.parametrization import load_protein_pdb
+from gbsa_pipeline.parametrization import load_protein_pdb
 
 
 def test_read_1of1_molecules() -> None:
