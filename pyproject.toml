@@ -9,7 +9,7 @@ authors = [{ name = "Davide Crucitti", email = "davide.crucitti@grheco.com" }]
 license = "EUPL-1.2"
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 keywords = []
 dynamic = ["version"]
 classifiers = [
@@ -31,7 +31,8 @@ classifiers = [
 dependencies = [
     "molvs>=0.1.1,<0.2",
     "pre-commit>=4.5.1,<5",
-    "meeko>=0.5,<0.6", "pydantic",
+    "meeko>=0.5,<0.6",
+    "pydantic",
 ]
 
 [project.urls]
