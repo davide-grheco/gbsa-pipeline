@@ -139,9 +139,7 @@ WATER_RESNAMES = {"SOL", "WAT", "HOH", "TIP3", "TIP3P"}
 
 @pytest.mark.integration
 def test_openmm_preparametrized(tmp_path: Path) -> None:
-    testdata = (
-        Path(__file__).resolve().parent / "testdata" / "solvation" / "complex.pickle"
-    )
+    testdata = Path(__file__).resolve().parent / "testdata" / "solvation" / "complex.pickle"
     with testdata.open("rb") as f:
         complex_obj = pickle.load(f)
 
@@ -170,16 +168,14 @@ def test_openmm_preparametrized(tmp_path: Path) -> None:
     assert len(water_residues) > 0, "No water molecules found in solvated system"
 
 
+@pytest.mark.integration
 def test_bss_solvation() -> None:
     testdata = Path(__file__).resolve().parent / "testdata" / "solvation"
 
-@pytest.mark.integration
     system = BSS.IO.readMolecules([str(testdata / "complex.gro"), str(testdata / "complex.top")])
     n_atoms_before = system.nAtoms()
 
-    system = BSS.IO.readMolecules(
-        [str(testdata / "complex.gro"), str(testdata / "complex.top")]
-    )
+    solvated = run_solvation(
         system=system,
         params=SolvationParams(
             water_model=WaterModel.TIP3P,
