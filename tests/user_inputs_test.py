@@ -59,14 +59,14 @@ def test_solvation_params_input_round_trip() -> None:
         padding=1.0,
         box_size=None,
         ion_concentration=0.0,
-        is_neutral=False,
+        neutralize=False,
         shape="cubic",
     )
 
     assert params.water_model == WaterModel.TIP4P
     assert params.padding == 1.0
     assert params.box_size is None
-    assert params.is_neutral is False
+    assert params.neutralize is False
     assert params.shape == BoxShape.CUBIC
 
 
