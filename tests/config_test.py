@@ -10,7 +10,12 @@ import pytest
 from pydantic import ValidationError
 
 from gbsa_pipeline.change_defaults import GromacsParams
-from gbsa_pipeline.change_defaults_enum import Barostat, Constraints, Thermostat, VelocityGeneration
+from gbsa_pipeline.change_defaults_enum import (
+    Barostat,
+    Constraints,
+    Thermostat,
+    VelocityGeneration,
+)
 from gbsa_pipeline.cli import main as cli_main
 from gbsa_pipeline.config import (
     RunConfig,
@@ -165,7 +170,7 @@ def test_solvation_config_defaults() -> None:
     assert cfg.box_size == 8.0
     assert cfg.padding is None
     assert cfg.ion_concentration == 0.15
-    assert cfg.is_neutral is True
+    assert cfg.neutralize is True
 
 
 # ---------------------------------------------------------------------------
