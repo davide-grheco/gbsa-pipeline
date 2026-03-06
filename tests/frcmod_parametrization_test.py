@@ -536,6 +536,7 @@ def test_parametrize_mcpb_with_ligand_openmm(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 def test_load_amber_complex_creates_gromacs_files(tmp_path: Path) -> None:
     """load_amber_complex writes non-empty .gro and .top files."""
     result = load_amber_complex(AmberInput(prmtop=DRY_PRMTOP, inpcrd=DRY_INPCRD, output_dir=tmp_path))
@@ -545,6 +546,7 @@ def test_load_amber_complex_creates_gromacs_files(tmp_path: Path) -> None:
     assert result.top_file.stat().st_size > 0
 
 
+@pytest.mark.integration
 def test_load_amber_complex_atom_and_residue_count(tmp_path: Path) -> None:
     """Exported topology has the expected number of atoms and residues."""
     result = load_amber_complex(AmberInput(prmtop=DRY_PRMTOP, inpcrd=DRY_INPCRD, output_dir=tmp_path))
@@ -553,6 +555,7 @@ def test_load_amber_complex_atom_and_residue_count(tmp_path: Path) -> None:
     assert len(struct.residues) == _EXPECTED_RESIDUES
 
 
+@pytest.mark.integration
 def test_load_amber_complex_zn_type(tmp_path: Path) -> None:
     """Exported topology contains exactly one Zn atom with type M1."""
     result = load_amber_complex(AmberInput(prmtop=DRY_PRMTOP, inpcrd=DRY_INPCRD, output_dir=tmp_path))
@@ -562,6 +565,7 @@ def test_load_amber_complex_zn_type(tmp_path: Path) -> None:
     assert zn_atoms[0].type == _ZN_TYPE
 
 
+@pytest.mark.integration
 def test_load_amber_complex_zn_charge(tmp_path: Path) -> None:
     """Zn RESP charge survives the prmtop → GROMACS round-trip."""
     result = load_amber_complex(AmberInput(prmtop=DRY_PRMTOP, inpcrd=DRY_INPCRD, output_dir=tmp_path))
@@ -570,6 +574,7 @@ def test_load_amber_complex_zn_charge(tmp_path: Path) -> None:
     assert abs(zn.charge - _ZN_CHARGE) < 1e-4
 
 
+@pytest.mark.integration
 def test_load_amber_complex_zn_lj_params(tmp_path: Path) -> None:
     """Zn LJ parameters survive the prmtop → GROMACS round-trip."""
     result = load_amber_complex(AmberInput(prmtop=DRY_PRMTOP, inpcrd=DRY_INPCRD, output_dir=tmp_path))

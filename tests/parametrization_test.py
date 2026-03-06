@@ -131,8 +131,8 @@ def test_export_gromacs_top_gro(monkeypatch: pytest.MonkeyPatch) -> None:
     paths = export_gromacs_top_gro(system_mock, prefix="out/complex")
 
     assert len(calls) == 2
-    assert calls[0][2] == "GRO"
-    assert calls[1][2] == "TOP"
+    assert calls[0][2] == "gro87"
+    assert calls[1][2] == "grotop"
 
     assert len(paths) == 2
     suffixes = {p.suffix for p in paths}
