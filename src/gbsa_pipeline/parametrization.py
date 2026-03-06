@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+import pickle
 import tempfile
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
 
@@ -21,6 +23,8 @@ if TYPE_CHECKING:
 from gbsa_pipeline.parametrization_enum import ChargeMethod, LigandFF, ProteinFF
 
 PathLike = Union[str, Path]
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -137,11 +141,25 @@ class ParametrisedComplex:
     config:
         The force field configuration used to produce this complex.
         Stored so that downstream steps can record or reproduce the run.
+    forcefield:
+        The OpenMM ``ForceField`` (with GAFF registered and ligand charges
+        already assigned) used during parametrization.  Passed directly to
+        :func:`~gbsa_pipeline.solvation_openmm.solvate_openmm` so that
+        water XML can be loaded into it without rebuilding from scratch or
+        re-running AM1-BCC.  ``None`` when the complex was loaded from disk
+        (e.g. :func:`~gbsa_pipeline.frcmod_parametrization.load_amber_complex`).
+    parmed_structure:
+        The ParmEd ``Structure`` holding every protein+ligand force field
+        parameter produced during parametrization.  Passed directly to
+        :func:`~gbsa_pipeline.solvation_openmm.solvate_openmm` to avoid
+        reloading from the GROMACS files.  ``None`` when loaded from disk.
     """
 
     gro_file: Path
     top_file: Path
     config: ParametrizationConfig
+    forcefield: Any = field(default=None, hash=False, compare=False, repr=False)
+    parmed_structure: Any = field(default=None, hash=False, compare=False, repr=False)
 
 
 # ---------------------------------------------------------------------------
@@ -199,16 +217,25 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
     work_dir.mkdir(parents=True, exist_ok=True)
 
     # --- Protein -------------------------------------------------------
+    logger.debug("Loading protein PDB: %s …", inp.protein_pdb)
     pdb = PDBFile(str(inp.protein_pdb))
+    logger.debug("Protein PDB loaded (%d atoms).", pdb.topology.getNumAtoms())
 
     # --- Ligand --------------------------------------------------------
+    logger.debug("Loading ligand SDF: %s …", inp.ligand_sdf)
     ligand = Molecule.from_file(str(inp.ligand_sdf))
     if not ligand.conformers:
         raise ValueError(
             f"Ligand SDF '{inp.ligand_sdf}' contains no 3-D conformers. "
             "Provide an SDF file with embedded 3-D coordinates."
         )
+    logger.debug(
+        "Ligand loaded (%d atoms, %d conformers).",
+        ligand.n_atoms,
+        len(ligand.conformers),
+    )
 
+    logger.debug("Assigning partial charges (method=%s) …", inp.config.charge_method.value)
     kwargs: dict[str, Any] = {
         "partial_charge_method": inp.config.charge_method.value,
         "normalize_partial_charges": False,
@@ -217,36 +244,63 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
     if inp.net_charge is not None:
         kwargs["partial_charges"] = None  # reset; net_charge is passed separately
     ligand.assign_partial_charges(**kwargs)
+    logger.debug("Partial charges assigned.")
 
     # --- Force field ---------------------------------------------------
     protein_xmls = _PROTEIN_FF_XML[inp.config.protein_ff]
     extra_xmls = [str(p) for p in inp.config.extra_ff_files]
+    logger.debug(
+        "Building force field (protein=%s, extra=%d files) …",
+        inp.config.protein_ff.value,
+        len(extra_xmls),
+    )
     forcefield = ForceField(*protein_xmls, *extra_xmls)
+    logger.debug("Force field built.")
 
+    logger.debug(
+        "Registering GAFF template generator (%s) …",
+        _GAFF_FF_VERSION[inp.config.ligand_ff],
+    )
     gaff = GAFFTemplateGenerator(
         molecules=[ligand],
         forcefield=_GAFF_FF_VERSION[inp.config.ligand_ff],
         cache=None,
     )
     forcefield.registerTemplateGenerator(gaff.generator)
+    logger.debug("GAFF template generator registered.")
 
+    logger.debug("Combining protein+ligand topology …")
     modeller = Modeller(pdb.topology, pdb.positions)
     modeller.add(ligand.to_topology().to_openmm(), ligand.conformers[0].to_openmm())
+    logger.debug("Combined topology: %d atoms.", modeller.topology.getNumAtoms())
 
-    system = forcefield.createSystem(
+    logger.debug("Creating OpenMM system (may take a moment) …")
+    system: System = forcefield.createSystem(
         modeller.topology,
         nonbondedMethod=NoCutoff,
         constraints=None,  # VERY IMPORTANT THIS INFORMATION DOES NOT GET LOST: Constraints None is safe, HBOND fails as the generated top file does not fit with the parameters
     )
+    logger.debug("OpenMM system created (%d particles).", system.getNumParticles())
 
+    logger.debug("Converting OpenMM system to ParmEd structure …")
     structure = pmd.openmm.load_topology(modeller.topology, system, modeller.positions)
+    logger.debug("ParmEd structure ready (%d atoms).", len(structure.atoms))
 
     gro_file = work_dir / "complex.gro"
     top_file = work_dir / "complex.top"
+    logger.debug("Writing GROMACS topology → %s …", top_file)
     structure.save(str(top_file), format="gromacs")
+    logger.debug("Writing GROMACS coordinates → %s …", gro_file)
     structure.save(str(gro_file))
+    logger.debug("GROMACS files written.")
 
-    return ParametrisedComplex(gro_file=gro_file, top_file=top_file, config=inp.config)
+    complex = ParametrisedComplex(
+        gro_file=gro_file,
+        top_file=top_file,
+        config=inp.config,
+        forcefield=forcefield,
+        parmed_structure=structure,
+    )
 
 
 # ---------------------------------------------------------------------------
