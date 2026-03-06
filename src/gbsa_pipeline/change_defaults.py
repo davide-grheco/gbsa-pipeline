@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from gbsa_pipeline.change_defaults_enum import (
     Barostat,
     CommMode,
+    Constraints,
     ConstraintsAlgorithms,
     CoulombModifier,
     CoulombType,
@@ -21,8 +22,11 @@ from gbsa_pipeline.change_defaults_enum import (
     Integrator,
     LJPMECombination,
     NghCutoffScheme,
+    PCoupleType,
+    Thermostat,
     VDWModifier,
     VDWType,
+    VelocityGeneration,
 )
 from gbsa_pipeline.change_params import format_gmx_value
 
@@ -92,6 +96,23 @@ class GromacsParams(BaseModel):
     lj_pme_comb_rule: LJPMECombination = LJPMECombination.GEOMETRIC
     pcoupl: Barostat = Barostat.NO
     refcoord_scaling: str = "No"
+    # Thermostat
+    tcoupl: Thermostat = Thermostat.NO
+    tc_grps: str = "System"
+    tau_t: float = 0.1
+    ref_t: float = 300.0
+    nhchainlength: int = 10
+    # Barostat (additional coupling fields)
+    pcoupltype: PCoupleType = PCoupleType.ISOTROPIC
+    tau_p: float = 2.0
+    ref_p: float = 1.0
+    compressibility: float = 4.5e-5
+    # Velocity generation
+    gen_vel: VelocityGeneration = VelocityGeneration.NO
+    gen_temp: float = 300.0
+    gen_seed: int = -1
+    # Bond constraints
+    constraints: Constraints = Constraints.NONE
     constraint_algorithm: ConstraintsAlgorithms = ConstraintsAlgorithms.LINCS
     continuation: bool = False
     shake_sor: str = "no"
