@@ -9,6 +9,7 @@ from gbsa_pipeline.config import RunConfig
 from gbsa_pipeline.frcmod_parametrization import AmberFFInput, AmberInput, build_amber_ff_xml, load_amber_complex
 from gbsa_pipeline.parametrization import ParametrisedComplex, ParametrizationConfig, ParametrizationInput, parametrize
 from gbsa_pipeline.pipeline import run_pipeline
+from gbsa_pipeline.solvation_openmm import SolvatedComplex, solvate_openmm
 
 __all__ = [
     "AmberFFInput",
@@ -17,8 +18,10 @@ __all__ = [
     "ParametrizationConfig",
     "ParametrizationInput",
     "RunConfig",
+    "SolvatedComplex",
     "build_amber_ff_xml",
     "load_amber_complex",
     "parametrize",
     "run_pipeline",
+    "solvate_openmm",
 ]

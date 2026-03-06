@@ -78,7 +78,7 @@ class SolvationParams(BaseModel):
     padding: float | None = None
     solvent: WaterBuilder | None = None
     ion_concentration: float | None = None  # mol/L
-    is_neutral: bool = True
+    neutralize: bool = True
 
     @model_validator(mode="before")
     @classmethod
@@ -119,7 +119,7 @@ def run_solvation(system: BSS._SireWrappers.System, params: SolvationParams) -> 
     """Prepare and run solvation with a parameter object."""
     water = _coerce_water_model(params.water_model)
 
-    kwargs = {"molecule": system, "is_neutral": params.is_neutral}
+    kwargs = {"molecule": system, "is_neutral": params.neutralize}
 
     if params.ion_concentration is not None:
         kwargs["ion_conc"] = params.ion_concentration

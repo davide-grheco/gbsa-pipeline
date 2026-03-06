@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import parmed as pmd
@@ -38,17 +39,61 @@ _WATER_NAME: dict[WaterModel, str] = {
 }
 
 
+@dataclass(frozen=True)
+class SolvatedComplex:
+    """Solvated protein-ligand complex produced by :func:`solvate_openmm`.
+
+    Carries both the on-disk GROMACS files (written for inspection and
+    checkpoint purposes) and the in-memory ParmEd structure so that
+    downstream steps can use either without repeating disk I/O.
+
+    Attributes:
+    ----------
+    gro_file:
+        GROMACS coordinate file (``.gro``) of the solvated system.
+    top_file:
+        GROMACS topology file (``.top``) of the solvated system.
+    parmed_structure:
+        In-memory ParmEd ``Structure`` with all force-field parameters.
+        ``None`` when the object is constructed from existing files rather
+        than from a live parametrization run.
+    """
+
+    gro_file: Path
+    top_file: Path
+    parmed_structure: Any = field(default=None, hash=False, compare=False, repr=False)
+
+    def load_bss(self) -> Any:
+        """Load this complex as a BioSimSpace System for MD stages.
+
+        Reads from the GROMACS files already written to disk.  The returned
+        system is ready for minimization, equilibration, and production MD.
+
+        Returns:
+        -------
+        BioSimSpace._SireWrappers.System
+            The solvated system loaded into BioSimSpace.
+        """
+        if not self.gro_file.exists() or not self.top_file.exists():
+            raise FileNotFoundError(f"SolvatedComplex files not found: {self.gro_file}, {self.top_file}.")
+        import BioSimSpace as BSS  # noqa: PLC0415
+
+        return BSS.IO.readMolecules([str(self.gro_file), str(self.top_file)])
+
+
 def solvate_openmm(
     parametrized: ParametrisedComplex,
     params: SolvationParams,
     output_gro: Path,
     output_top: Path,
-) -> tuple[Path, Path]:
+) -> SolvatedComplex:
     """Solvate a parametrised complex with OpenMM + ParmEd (no BSS IO).
 
     Reuses the ``ForceField`` and ParmEd ``Structure`` carried by
     *parametrized* — built in the parametrization stage — so that AM1-BCC
-    charge assignment and disk I/O are not repeated.
+    charge assignment is not repeated.  Writes GROMACS ``.gro`` and ``.top``
+    files and returns a :class:`SolvatedComplex` that carries both the file
+    paths and the in-memory ParmEd structure.
 
     Parameters
     ----------
@@ -65,8 +110,9 @@ def solvate_openmm(
 
     Returns:
     -------
-    tuple[Path, Path]
-        ``(output_gro, output_top)`` — the paths that were written.
+    SolvatedComplex
+        Dataclass holding the written file paths and the in-memory ParmEd
+        structure of the solvated system.
 
     Raises:
     ------
@@ -99,7 +145,7 @@ def solvate_openmm(
     logger.debug("Using in-memory ParmEd structure (%d atoms).", n_orig)
 
     # ------------------------------------------------------------------
-    # 2. Extend the existing ForceField with water templates
+    # 2. Extend the existing ForceField with water templates.
     #    GAFF is already registered with pre-assigned ligand charges,
     #    so AM1-BCC will not re-run.
     # ------------------------------------------------------------------
@@ -107,10 +153,9 @@ def solvate_openmm(
     ff: ForceField = parametrized.forcefield
     logger.debug("Loading water FF (%s) into existing ForceField …", water_xml)
     ff.loadFile(water_xml)
-    # ff.loadFile("amber14/ions.xml")
 
     # ------------------------------------------------------------------
-    # 3. Add solvent (water + ions) via OpenMM Modeller
+    # 3. Add solvent (water + ions) via OpenMM Modeller.
     #    Full ForceField ensures correct clash detection for all residues.
     # ------------------------------------------------------------------
     logger.debug("Creating Modeller from existing topology …")
@@ -118,14 +163,14 @@ def solvate_openmm(
 
     kwargs: dict[str, Any] = {
         "model": _WATER_NAME[water_model],
-        "neutralize": params.is_neutral,
+        "neutralize": params.neutralize,
     }
     if params.ion_concentration is not None:
         kwargs["ionicStrength"] = params.ion_concentration * mm_unit.molar
     if params.padding is not None:
         kwargs["padding"] = params.padding * mm_unit.nanometer
     else:
-        kwargs["boxSize"] = boxSize = Vec3(params.box_size, params.box_size, params.box_size) * mm_unit.nanometer  # type: ignore[operator]
+        kwargs["boxSize"] = Vec3(params.box_size, params.box_size, params.box_size) * mm_unit.nanometer
     if box_shape is BoxShape.TRUNCATED_OCTAHEDRON:
         kwargs["boxShape"] = "octahedron"
 
@@ -135,14 +180,21 @@ def solvate_openmm(
         f"padding={params.padding} nm" if params.padding is not None else f"box_size={params.box_size} nm",
         box_shape,
     )
-    modeller.addSolvent(parametrized.forcefield, **kwargs)
+    modeller.addSolvent(ff, **kwargs)
     logger.debug("Solvated topology: %d atoms.", modeller.topology.getNumAtoms())
 
+    # ------------------------------------------------------------------
+    # 4. Build full OpenMM system → ParmEd structure.
+    #    rigidWater=False keeps O-H bonds in HarmonicBondForce so ParmEd
+    #    can resolve SETTLE geometry when writing GROMACS topology.
+    # ------------------------------------------------------------------
+    logger.debug("Creating solvated OpenMM system …")
     system = ff.createSystem(modeller.topology, nonbondedMethod=NoCutoff, constraints=None, rigidWater=False)
+    logger.debug("Converting to ParmEd structure …")
     structure = pmd.openmm.load_topology(modeller.topology, system, modeller.positions)
 
     # ------------------------------------------------------------------
-    # 7. Write GROMACS gro + top
+    # 5. Write GROMACS gro + top
     # ------------------------------------------------------------------
     logger.debug("Writing GROMACS topology → %s …", output_top)
     structure.save(str(output_top), format="gromacs", overwrite=True)
@@ -150,4 +202,8 @@ def solvate_openmm(
     structure.save(str(output_gro), overwrite=True)
     logger.debug("Solvated files written.")
 
-    return output_gro, output_top
+    return SolvatedComplex(
+        gro_file=output_gro,
+        top_file=output_top,
+        parmed_structure=structure,
+    )
