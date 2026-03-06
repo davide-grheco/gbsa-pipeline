@@ -26,3 +26,6 @@ uv.lock
 .mypy_cache/
 .ruff_cache/
 __pycache__/
+
+# Project stuff and testing
+tst/

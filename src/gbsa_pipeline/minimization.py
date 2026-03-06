@@ -7,21 +7,24 @@ from typing import TYPE_CHECKING
 import BioSimSpace as BSS
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import sire
 
 
-def run_minimization(nsteps: int, system: sire.System, engine: str = "GROMACS") -> BSS.System:
-    """Preopare a minimization protocoll by selecting maximal number of steps and engine."""
-    protocol = BSS.Protocol.Minimisation(steps=nsteps)
-    process = BSS.MD.run(
-        system,
-        protocol,
-        engine=engine,
-        gpu_support=False,
-        auto_start=True,
-        name="min",
-        property_map={},
-    )
-    minimized = process.getSystem(block=True)
+def run_minimization(nsteps: int, system: sire.System, work_dir: Path | None = None) -> BSS.System:
+    """Run energy minimization via GROMACS.
 
-    return minimized
+    Args:
+        nsteps: Maximum number of minimization steps.
+        system: Solvated system to minimize.
+        work_dir: Optional working directory for GROMACS files.
+
+    Returns:
+        Minimized BioSimSpace system.
+    """
+    protocol = BSS.Protocol.Minimisation(steps=nsteps)
+    kwargs = {"work_dir": str(work_dir)} if work_dir else {}
+    process = BSS.Process.Gromacs(system, protocol, name="min", **kwargs)
+    process.start()
+    return process.getSystem(block=True)

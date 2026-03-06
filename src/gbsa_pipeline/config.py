@@ -47,7 +47,7 @@ class SolvationConfig(BaseModel):
     padding: float | None = None
     box_size: float | None = 8.0
     ion_concentration: float = 0.15
-    is_neutral: bool = True
+    neutralize: bool = True
 
 
 class MinimizationConfig(BaseModel):

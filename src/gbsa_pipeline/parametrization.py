@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import pickle
 import tempfile
@@ -238,7 +239,7 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
     logger.debug("Assigning partial charges (method=%s) …", inp.config.charge_method.value)
     kwargs: dict[str, Any] = {
         "partial_charge_method": inp.config.charge_method.value,
-        "normalize_partial_charges": False,
+        "normalize_partial_charges": True,
         "use_conformers": ligand.conformers,
     }
     if inp.net_charge is not None:
@@ -301,6 +302,12 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
         forcefield=forcefield,
         parmed_structure=structure,
     )
+
+    cache_file = work_dir / "complex.pickle"
+    with contextlib.suppress(Exception):
+        cache_file.write_bytes(pickle.dumps(complex))
+
+    return complex
 
 
 # ---------------------------------------------------------------------------
@@ -429,7 +436,7 @@ def export_gromacs_top_gro(
     out_gro = Path(f"{prefix}.gro")
     out_top = Path(f"{prefix}.top")
 
-    BSS.IO.saveMolecules(str(out_gro), system, fileformat="GRO")
-    BSS.IO.saveMolecules(str(out_top), system, fileformat="TOP")
+    BSS.IO.saveMolecules(str(out_gro), system, fileformat="gro87")
+    BSS.IO.saveMolecules(str(out_top), system, fileformat="grotop")
 
     return [out_gro, out_top]
