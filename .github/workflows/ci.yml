@@ -84,3 +84,34 @@ jobs:
 
       - name: Run the test suite
         run: pixi run -e dev test
+
+  docs:
+    needs: [quality]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup pixi
+        uses: prefix-dev/setup-pixi@v0
+        with:
+          cache: true
+
+      - name: Install dependencies
+        run: pixi install -e dev
+
+      - name: Build docs
+        run: pixi run -e dev docs-deploy
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site

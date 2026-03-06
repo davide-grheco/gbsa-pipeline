@@ -98,14 +98,14 @@ ruff-fix = "ruff check --config config/ruff.toml --fix ."
 mypy = "mypy --config-file config/mypy.ini -p gbsa_pipeline -p tests"
 check-quality = "ruff check src tests --config config/ruff.toml"
 check-types = "FORCE_COLOR=1 mypy --config-file config/mypy.ini -p gbsa_pipeline -p tests"
-check-docs = "mkdir -p htmlcov && touch htmlcov/index.html && mkdocs build --strict --verbose"
+check-docs = "mkdir -p htmlcov && touch htmlcov/index.html && zensical build -f mkdocs.yml"
 check-api = "griffe check gbsa_pipeline --search src --color --against main"
 check = "ruff check src tests --config config/ruff.toml && FORCE_COLOR=1 mypy --config-file config/mypy.ini -p gbsa_pipeline -p tests && mkdir -p htmlcov && touch htmlcov/index.html && griffe check gbsa_pipeline --search src --color --against main"
 test-all = "COVERAGE_FILE=.coverage PYTHONWARNDEFAULTENCODING=1 pytest tests -n auto --color=yes"
 test = "COVERAGE_FILE=.coverage PYTHONWARNDEFAULTENCODING=1 pytest tests -n auto --color=yes -m 'not integration'"
 
-docs = "mkdocs serve -a 127.0.0.1:8000"
-docs-deploy = "DEPLOY=true mkdocs gh-deploy --force"
+docs = "zensical serve -f mkdocs.yml -a 127.0.0.1:8000"
+docs-deploy = "zensical build -f mkdocs.yml"
 changelog = "git-changelog && yore check"
 pre-commit-install = "pre-commit install"
 pre-commit-run = "pre-commit run --all-files"
@@ -129,11 +129,10 @@ dev = [
     "types-pyyaml>=6.0",
     "markdown-callouts>=0.4",
     "markdown-exec>=1.8",
-    "mkdocs>=1.6",
+    "zensical>=0.0.24",
     "mkdocs-coverage>=1.0",
     "mkdocs-git-revision-date-localized-plugin>=1.2",
     "mkdocs-llmstxt>=0.2",
-    "mkdocs-material>=9.5",
     "mkdocs-minify-plugin>=0.8",
     "mkdocs-section-index>=0.3",
     "mkdocstrings[python]>=1.0.3,<2",
