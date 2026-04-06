@@ -2,9 +2,9 @@
 
 Provides two independent workflows:
 
-- :class:`AmberInput` / :func:`load_amber_complex` — load a fully
+- :class:`AmberInput` / :func:`load_amber_complex` - load a fully
   pre-parametrized AMBER system (prmtop + inpcrd) and export it to GROMACS.
-- :class:`AmberFFInput` / :func:`build_amber_ff_xml` — convert AMBER frcmod
+- :class:`AmberFFInput` / :func:`build_amber_ff_xml` - convert AMBER frcmod
   and mol2 residue template files into a unified OpenMM ForceField XML that
   can be passed to :class:`~gbsa_pipeline.parametrization.ParametrizationConfig`
   via ``extra_ff_files``.
@@ -24,7 +24,7 @@ from gbsa_pipeline.parametrization import ParametrisedComplex, ParametrizationCo
 from gbsa_pipeline.parametrization_enum import LigandFF, ProteinFF
 
 # ---------------------------------------------------------------------------
-# Internal helpers — AMBER parameter file locations
+# Internal helpers - AMBER parameter file locations
 # ---------------------------------------------------------------------------
 
 # Maps each protein FF to the base AMBER parameter files it needs.
@@ -48,9 +48,11 @@ def _find_amber_parm_dir() -> Path:
     falls back to ``sys.prefix`` (the active conda/venv environment root).
 
     Raises:
-        RuntimeError: If the directory cannot be located.
+    ------
+    RuntimeError
+        If the directory cannot be located.
     """
-    candidates = []
+    candidates: list[Path] = []
     if amberhome := os.environ.get("AMBERHOME"):
         candidates.append(Path(amberhome))
     candidates.append(Path(sys.prefix))
@@ -87,15 +89,15 @@ class AmberFFInput(BaseModel):
         custom bond, angle, dihedral, and LJ parameters.
     residue_mol2s:
         Mol2 files for non-standard residues (e.g. metal-coordinating CYS/HIS
-        modified by MCPB.py, bare metal ions).  Each file must contain exactly
+        modified by MCPB.py, bare metal ions). Each file must contain exactly
         one ``@<TRIPOS>MOLECULE`` block.
     protein_ff:
-        Protein force field.  Determines which base AMBER parameter files are
+        Protein force field. Determines which base AMBER parameter files are
         loaded (``parm19.dat + frcmod.ff14SB`` for FF14SB, etc.).
     ligand_ff:
-        Ligand force field.  Determines ``gaff.dat`` vs ``gaff2.dat``.
+        Ligand force field. Determines ``gaff.dat`` vs ``gaff2.dat``.
     output_xml:
-        Path where the unified XML is written.  A file inside a temporary
+        Path where the unified XML is written. A file inside a temporary
         directory is used when ``None``.
     """
 
@@ -130,27 +132,29 @@ def build_amber_ff_xml(inp: AmberFFInput) -> Path:
         Validated inputs.
 
     Returns:
+    -------
+    Path
         Path to the written XML file.
 
     Raises:
-        RuntimeError: If the AMBER parameter directory cannot be found.
-        ValueError: If any atom type referenced in a residue template is not
-            defined in the combined parameter set.
+    ------
+    RuntimeError
+        If the AMBER parameter directory cannot be found.
+    ValueError
+        If any atom type referenced in a residue template is not defined in
+        the combined parameter set.
     """
     parm_dir = _find_amber_parm_dir()
 
-    # Base AMBER parameter files for the chosen force fields.
     base_files = [str(parm_dir / f) for f in _PROTEIN_BASE_PARAMS[inp.protein_ff]]
     base_files.append(str(parm_dir / _LIGAND_BASE_PARAMS[inp.ligand_ff]))
 
-    # Load base params + user frcmod files into a single AmberParameterSet.
     amber_parm = pmd.amber.AmberParameterSet(
         *base_files,
         *(str(f) for f in inp.frcmod_files),
     )
     ff = pmd.openmm.OpenMMParameterSet.from_parameterset(amber_parm)
 
-    # Merge mol2 residue templates directly into the parameter set.
     for mol2_path in inp.residue_mol2s:
         mol2 = pmd.load_file(str(mol2_path))
         if isinstance(mol2, pmd.modeller.ResidueTemplateContainer):
@@ -158,13 +162,13 @@ def build_amber_ff_xml(inp: AmberFFInput) -> Path:
         else:
             ff.residues[mol2.name] = mol2
 
-    # Validate: all types used in templates must be defined.
     defined = set(ff.atom_types.keys())
     used: set[str] = set()
     for templ in ff.residues.values():
         for atom in templ.atoms:
             if at := getattr(atom, "type", None):
                 used.add(str(at))
+
     missing = used - defined
     if missing:
         raise ValueError(
@@ -173,8 +177,7 @@ def build_amber_ff_xml(inp: AmberFFInput) -> Path:
             f"Add a frcmod file that defines these types."
         )
 
-    # Write unified XML.
-    output_xml = inp.output_xml or Path(tempfile.mkdtemp(prefix="gbsa_ff_")) / "combined.xml"
+    output_xml = inp.output_xml or (Path(tempfile.mkdtemp(prefix="gbsa_ff_")) / "combined.xml")
     ff.write(str(output_xml), write_unused=True)
     return output_xml
 
@@ -195,8 +198,8 @@ class AmberInput(BaseModel):
     inpcrd:
         AMBER coordinate file (``.inpcrd`` / ``.rst7``).
     output_dir:
-        Directory for GROMACS output files.  A temporary directory is
-        created when ``None``.
+        Directory for GROMACS output files. A temporary directory is created
+        when ``None``.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", validate_default=True)
@@ -217,8 +220,9 @@ def load_amber_complex(inp: AmberInput) -> ParametrisedComplex:
         Validated inputs.
 
     Returns:
-        :class:`~gbsa_pipeline.parametrization.ParametrisedComplex` with
-        paths to the GROMACS coordinate and topology files.
+    -------
+    ParametrisedComplex
+        Object with paths to the GROMACS coordinate and topology files.
     """
     work_dir = inp.output_dir or Path(tempfile.mkdtemp(prefix="gbsa_amber_"))
     work_dir.mkdir(parents=True, exist_ok=True)
