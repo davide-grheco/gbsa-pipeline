@@ -1,3 +1,5 @@
+# /home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/parametrization.py
+
 """Parametrize protein-ligand complexes."""
 
 from __future__ import annotations
@@ -39,12 +41,6 @@ class ParametrizationConfig(BaseModel):
     Defaults to AMBER ff14SB + GAFF2 + AM1-BCC.
     Use the class-method presets for the most common combinations, or
     construct directly to override individual axes.
-
-    Examples:
-    --------
-    >>> ParametrizationConfig()  # all defaults
-    >>> ParametrizationConfig(protein_ff=ProteinFF.FF19SB)  # swap protein FF
-    >>> ParametrizationConfig.amber14_gaff2_nagl()  # preset with NAGL charges
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid", validate_default=True)
@@ -63,10 +59,6 @@ class ParametrizationConfig(BaseModel):
             raise ValueError("Extra force field files not found: " + ", ".join(str(p) for p in missing))
         return result
 
-    # ------------------------------------------------------------------
-    # Named presets
-    # ------------------------------------------------------------------
-
     @classmethod
     def amber14_gaff2(cls) -> ParametrizationConfig:
         """AMBER ff14SB + GAFF2 + AM1-BCC charges (default)."""
@@ -79,7 +71,7 @@ class ParametrizationConfig(BaseModel):
 
     @classmethod
     def amber14_gaff2_nagl(cls) -> ParametrizationConfig:
-        """AMBER ff14SB + GAFF2 + NAGL graph-neural-network charges."""
+        """AMBER ff14SB + GAFF2 + NAGL charges."""
         return cls(charge_method=ChargeMethod.NAGL)
 
 
@@ -89,24 +81,7 @@ class ParametrizationConfig(BaseModel):
 
 
 class ParametrizationInput(BaseModel):
-    """Validated inputs for a parametrization run.
-
-    Parameters
-    ----------
-    protein_pdb:
-        Path to the protein PDB file. Must exist.
-    ligand_sdf:
-        Path to the ligand SDF file with embedded 3-D coordinates. Must exist.
-    config:
-        Force field and charge method selection. Defaults to
-        ``ParametrizationConfig()`` (ff14SB + GAFF2 + AM1-BCC).
-    net_charge:
-        Formal charge of the ligand in elementary charge units.
-        ``None`` lets the charge assignment toolkit determine it automatically.
-    work_dir:
-        Directory where intermediate and output files are written.
-        When ``None`` a temporary directory is created automatically.
-    """
+    """Validated inputs for a parametrization run."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", validate_default=True)
 
@@ -131,30 +106,7 @@ class ParametrizationInput(BaseModel):
 
 @dataclass(frozen=True)
 class ParametrisedComplex:
-    """Parametrised protein-ligand complex ready for solvation and MD.
-
-    Attributes:
-    ----------
-    gro_file:
-        GROMACS coordinate file (.gro) produced by ParmEd.
-    top_file:
-        GROMACS topology file (.top) produced by ParmEd.
-    config:
-        The force field configuration used to produce this complex.
-        Stored so that downstream steps can record or reproduce the run.
-    forcefield:
-        The OpenMM ``ForceField`` (with GAFF registered and ligand charges
-        already assigned) used during parametrization.  Passed directly to
-        :func:`~gbsa_pipeline.solvation_openmm.solvate_openmm` so that
-        water XML can be loaded into it without rebuilding from scratch or
-        re-running AM1-BCC.  ``None`` when the complex was loaded from disk
-        (e.g. :func:`~gbsa_pipeline.frcmod_parametrization.load_amber_complex`).
-    parmed_structure:
-        The ParmEd ``Structure`` holding every protein+ligand force field
-        parameter produced during parametrization.  Passed directly to
-        :func:`~gbsa_pipeline.solvation_openmm.solvate_openmm` to avoid
-        reloading from the GROMACS files.  ``None`` when loaded from disk.
-    """
+    """Parametrised protein-ligand complex ready for solvation and MD."""
 
     gro_file: Path
     top_file: Path
@@ -169,26 +121,7 @@ class ParametrisedComplex:
 
 
 def parametrize(inp: ParametrizationInput) -> ParametrisedComplex:
-    """Parametrize a protein-ligand complex without running tleap.
-
-    Uses OpenMM force field XML files for the protein and
-    ``GAFFTemplateGenerator`` for the ligand. Partial charges are assigned
-    via the method specified in ``inp.config.charge_method`` (default:
-    AM1-BCC via sqm). The system is exported to GROMACS ``.gro`` and
-    ``.top`` files via ParmEd.
-
-    Parameters
-    ----------
-    inp:
-        Validated parametrization inputs including file paths, force field
-        configuration, and optional work directory.
-
-    Returns:
-    -------
-    ParametrisedComplex
-        Frozen dataclass holding the paths to the output GROMACS files and
-        the configuration used.
-    """
+    """Parametrize a protein-ligand complex without running tleap."""
     return _parametrize_openmm(inp)
 
 
@@ -196,21 +129,58 @@ def parametrize(inp: ParametrizationInput) -> ParametrisedComplex:
 # OpenMM implementation
 # ---------------------------------------------------------------------------
 
-# OpenMM XML files (shipped with OpenMM / AmberTools) for each protein FF.
-# ff14SB is bundled with OpenMM; ff19SB and ff99SB-ILDN require the XML
-# files distributed with AmberTools 24+.
 _PROTEIN_FF_XML: dict[ProteinFF, list[str]] = {
     ProteinFF.FF14SB: ["amber14-all.xml"],
     ProteinFF.FF19SB: ["amber/protein.ff19SB.xml"],
     ProteinFF.FF99SB: ["amber/protein.ff99SBildn.xml"],
 }
 
-# GAFF version strings accepted by GAFFTemplateGenerator.
-# Verify against the version of openmmforcefields installed in your environment.
 _GAFF_FF_VERSION: dict[LigandFF, str] = {
     LigandFF.GAFF: "gaff-1.81",
     LigandFF.GAFF2: "gaff-2.11",
 }
+
+
+def _load_single_ligand_from_sdf(ligand_sdf: Path) -> Molecule:
+    """Load one ligand from SDF and normalize multi-molecule returns.
+
+    Exported docking SDFs may contain multiple poses/molecules.
+    For the current pipeline stage, we take the first molecule.
+    """
+    logger.debug("Loading ligand SDF: %s …", ligand_sdf)
+
+    loaded = Molecule.from_file(str(ligand_sdf))
+
+    if isinstance(loaded, list):
+        if len(loaded) == 0:
+            raise ValueError(f"No ligand molecules found in SDF: {ligand_sdf}")
+
+        if len(loaded) > 1:
+            logger.warning(
+                "Ligand SDF '%s' contained %d molecules/poses. Using the first one.",
+                ligand_sdf,
+                len(loaded),
+            )
+
+        ligand = loaded[0]
+    else:
+        ligand = loaded
+
+    if not isinstance(ligand, Molecule):
+        raise TypeError(f"Expected OpenFF Molecule from '{ligand_sdf}', got {type(ligand).__name__}")
+
+    if not ligand.conformers:
+        raise ValueError(
+            f"Ligand SDF '{ligand_sdf}' contains no 3-D conformers. Provide an SDF file with embedded 3-D coordinates."
+        )
+
+    logger.debug(
+        "Ligand loaded (%d atoms, %d conformers).",
+        ligand.n_atoms,
+        len(ligand.conformers),
+    )
+
+    return ligand
 
 
 def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
@@ -223,27 +193,27 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
     logger.debug("Protein PDB loaded (%d atoms).", pdb.topology.getNumAtoms())
 
     # --- Ligand --------------------------------------------------------
-    logger.debug("Loading ligand SDF: %s …", inp.ligand_sdf)
-    ligand = Molecule.from_file(str(inp.ligand_sdf))
-    if not ligand.conformers:
-        raise ValueError(
-            f"Ligand SDF '{inp.ligand_sdf}' contains no 3-D conformers. "
-            "Provide an SDF file with embedded 3-D coordinates."
-        )
+    ligand = _load_single_ligand_from_sdf(inp.ligand_sdf)
+
     logger.debug(
-        "Ligand loaded (%d atoms, %d conformers).",
-        ligand.n_atoms,
-        len(ligand.conformers),
+        "Assigning partial charges (method=%s) …",
+        inp.config.charge_method.value,
     )
 
-    logger.debug("Assigning partial charges (method=%s) …", inp.config.charge_method.value)
+    if inp.net_charge is not None:
+        logger.warning(
+            "ParametrizationInput.net_charge=%s was provided, but the current "
+            "OpenFF assign_partial_charges() path does not explicitly use it. "
+            "Proceeding with toolkit-assigned charges for now.",
+            inp.net_charge,
+        )
+
     kwargs: dict[str, Any] = {
         "partial_charge_method": inp.config.charge_method.value,
         "normalize_partial_charges": True,
         "use_conformers": ligand.conformers,
     }
-    if inp.net_charge is not None:
-        kwargs["partial_charges"] = None  # reset; net_charge is passed separately
+
     ligand.assign_partial_charges(**kwargs)
     logger.debug("Partial charges assigned.")
 
@@ -279,7 +249,7 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
     system: System = forcefield.createSystem(
         modeller.topology,
         nonbondedMethod=NoCutoff,
-        constraints=None,  # VERY IMPORTANT THIS INFORMATION DOES NOT GET LOST: Constraints None is safe, HBOND fails as the generated top file does not fit with the parameters
+        constraints=None,
     )
     logger.debug("OpenMM system created (%d particles).", system.getNumParticles())
 
@@ -295,7 +265,7 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
     structure.save(str(gro_file))
     logger.debug("GROMACS files written.")
 
-    complex = ParametrisedComplex(
+    complex_ = ParametrisedComplex(
         gro_file=gro_file,
         top_file=top_file,
         config=inp.config,
@@ -305,9 +275,9 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
 
     cache_file = work_dir / "complex.pickle"
     with contextlib.suppress(Exception):
-        cache_file.write_bytes(pickle.dumps(complex))
+        cache_file.write_bytes(pickle.dumps(complex_))
 
-    return complex
+    return complex_
 
 
 # ---------------------------------------------------------------------------
@@ -316,7 +286,7 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
 
 
 def load_protein_pdb(pdb_path: PathLike) -> BSS._SireWrappers.Molecule:
-    """Load a protein from a PDB file and return the (first) molecule."""
+    """Load a protein from a PDB file and return the first molecule."""
     system = BSS.IO.readMolecules(str(pdb_path))
     mols = system.getMolecules()
     if not mols:
@@ -330,11 +300,7 @@ def parameterise_protein_amber(
     water_model: str | None = None,
     work_dir: PathLike | None = None,
 ) -> BSS._SireWrappers.Molecule:
-    """Parameterize a protein via BioSimSpace/tleap.
-
-    Returns a BSS Molecule suitable for use with the BSS solvation and MD
-    pipeline. For tleap-free parametrization use :func:`parametrize`.
-    """
+    """Parameterize a protein via BioSimSpace/tleap."""
     ff = ff.lower().strip()
     kwargs: dict[str, Any] = {}
     if water_model is not None:
@@ -355,7 +321,7 @@ def parameterise_protein_amber(
 
 
 def _ensure_molecule(x: Any) -> BSS._SireWrappers.Molecule:
-    """Ensure that a molecule is returned as an BSS._SireWrappers.Molecule."""
+    """Ensure that a parameterization output is returned as a BSS Molecule."""
     if hasattr(x, "getMolecule"):
         return x.getMolecule()
     return x
@@ -367,11 +333,7 @@ def parameterise_ligand_gaff2(
     charge_method: str = "BCC",
     work_dir: PathLike | None = None,
 ) -> BSS._SireWrappers.Molecule:
-    """Parameterise a ligand via BioSimSpace/antechamber (GAFF2).
-
-    Returns a BSS Molecule suitable for use with the BSS solvation and MD
-    pipeline. For the OpenMM-based path use :func:`parametrize`.
-    """
+    """Parameterise a ligand via BioSimSpace/antechamber (GAFF2)."""
     kwargs: dict[str, Any] = {
         "net_charge": net_charge,
         "charge_method": charge_method,
@@ -404,8 +366,6 @@ def load_and_parameterise(
 
     .. deprecated::
         Use :func:`parametrize` with :class:`ParametrizationInput` instead.
-        ``ligand`` must now be a file path; BSS Molecule inputs are no longer
-        accepted. ``ligand_charge_method`` is ignored; AM1-BCC is used.
     """
     warnings.warn(
         "load_and_parameterise() is deprecated. Use parametrize() with ParametrizationInput instead.",
