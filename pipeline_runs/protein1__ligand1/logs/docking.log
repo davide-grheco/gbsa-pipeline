@@ -1,0 +1,44 @@
+
+╒══════════════════════════════════════════════════════════════════════════════════════════════════════╕
+│                                         STEP DOCKING STARTED                                         │
+╞══════════════════════════════════════════════════════════════════════════════════════════════════════╡
+│ timestamp : 2026-04-09 13:50:08 UTC                                                                  │
+│ log file  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/logs/docking.log │
+╘══════════════════════════════════════════════════════════════════════════════════════════════════════╛
+[meeko] preparing ligand -> ligand1.pdbqt
+[meeko] ligand PDBQT written: ligand1.pdbqt
+
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Docking inputs                                                                                                │
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ protein       : /home/grheco/repositorios/gbsa-pipeline/data/complex1/protein1.pdb                            │
+│ ligand input  : /home/grheco/repositorios/gbsa-pipeline/data/complex1/ligand1.sdf                             │
+│ ligand pdbqt  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1.pdbqt │
+│ auto center   : (-0.263, 0.614, 1.226)                                                                        │
+│ auto size     : (20.0, 21.547, 20.0)                                                                          │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+╒══════════════════════════════╕
+│           DOCKING            │
+╘══════════════════════════════╛
+[vina] workdir: /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking
+[obabel] converting receptor: protein1.pdb -> protein1.pdbqt
+[obabel] warning: finished with warnings; full details in protein1.obabel.log
+[vina] docking ligand: ligand1.pdbqt
+[vina] success: ligand1_vina_out.pdbqt written; best score 0.000 kcal/mol; log: ligand1_vina.log
+
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Docking outputs                                                                                                        │
+├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ manifest      : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/result.json            │
+│ selected pose : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1_vina_out.pdbqt │
+│ score         : 0.0                                                                                                    │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ STEP DOCKING FINISHED                                                                                │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ timestamp : 2026-04-09 13:52:38 UTC                                                                  │
+│ elapsed   : 02:30.02                                                                                 │
+│ log file  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/logs/docking.log │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────┘

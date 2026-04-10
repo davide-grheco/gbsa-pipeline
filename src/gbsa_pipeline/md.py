@@ -1,5 +1,3 @@
-# /home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/md.py
-
 """Combined MD stage for gbsa-pipeline.
 
 Overview
@@ -19,12 +17,14 @@ Current workflow
      Python API
 3. parameterize protein + ligand via gbsa_pipeline.parametrization
 4. solvate with OpenMM/ParmEd via gbsa_pipeline.solvation_openmm
-5. load the solvated GROMACS system into BioSimSpace
-6. run a first short GROMACS MD process
-7. persist both:
+5. run a short multi-stage GROMACS test protocol
+   - energy minimization
+   - short NVT heating
+   - short NVT production
+6. persist both:
    - user-friendly structural snapshots (PDB)
-   - native GROMACS run artefacts (trajectory, topology/run files, logs, energy)
-8. save a machine-readable manifest
+   - native GROMACS run artefacts from the final production stage
+7. save a machine-readable manifest
 
 Important design choices
 ------------------------
@@ -32,9 +32,9 @@ Important design choices
 - No Meeko CLI tool is used. Ligand export uses Meeko's Python API directly.
 - Input crystal waters are removed before parametrization because this workflow
   re-solvates the system explicitly.
-- Solvation is enabled by default so the first MD run has a neutralized/solvated box.
-- For downstream GBSA, the module now preserves native MD trajectory artefacts
-  instead of exposing only the last-frame PDB snapshot.
+- The default MD behavior in this module is intentionally short and test-oriented.
+- For downstream GBSA, the module preserves native MD trajectory artefacts from
+  the final production stage instead of exposing only the last-frame PDB snapshot.
 
 What this module does NOT do
 ----------------------------
@@ -54,7 +54,10 @@ import shutil
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 import BioSimSpace as BSS
 from meeko import PDBQTMolecule, RDKitMolCreate
@@ -94,6 +97,11 @@ _AMBER_TO_STANDARD_RESNAME: dict[str, str] = {
     "CARG": "ARG",
 }
 
+_KNOWN_GROMPP_WARNING_PATTERNS: tuple[str, ...] = (
+    "largest distance between excluded atoms",
+    "If you expect that minimization will bring such distances within the cut-off, you can ignore this warning.",
+)
+
 
 @dataclass(frozen=True)
 class MDInput:
@@ -123,12 +131,7 @@ class MDInput:
 
 @dataclass(frozen=True)
 class NativeMDOutputs:
-    """Stable copy of native GROMACS run outputs.
-
-    These are the files that downstream analysis/GBSA workflows typically need.
-    Any field may be None if the corresponding artefact was not produced or
-    could not be located in the BioSimSpace/GROMACS work directory.
-    """
+    """Stable copy of native GROMACS run outputs."""
 
     run_directory: Path | None
     trajectory_xtc: Path | None = None
@@ -178,6 +181,7 @@ class MDResult:
     final_md_pdb: Path | None
     native_md_outputs: NativeMDOutputs
     manifest_path: Path | None
+    stage_info: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert the successful MD result into a JSON-serializable dictionary."""
@@ -210,6 +214,7 @@ class MDResult:
                 "directory": str(self.md_dir),
                 "final_pdb": str(self.final_md_pdb) if self.final_md_pdb else None,
                 "native_outputs": self.native_md_outputs.to_dict(),
+                "stages": self.stage_info,
             },
             "manifest_path": str(self.manifest_path) if self.manifest_path else None,
         }
@@ -267,17 +272,17 @@ def _detect_is_dlg(path: Path) -> bool:
     return name.endswith((".dlg", ".dlg.gz"))
 
 
+def _is_tolerable_grompp_warning(exc: Exception) -> bool:
+    """Return True for known, explicitly tolerated grompp warnings."""
+    message = str(exc)
+    return all(pattern in message for pattern in _KNOWN_GROMPP_WARNING_PATTERNS)
+
+
 def _prepare_protein_pdb_for_parametrization(
     protein_pdb: Path,
     protein_dir: Path,
 ) -> tuple[Path, Path]:
-    """Write a temporary protein PDB suitable for the OpenMM parametrization path.
-
-    Current behavior
-    ----------------
-    - removes waters (HOH/WAT), because this workflow re-solvates explicitly
-    - maps common AMBER-style terminal residue names back to standard names
-    """
+    """Write a temporary protein PDB suitable for the OpenMM parametrization path."""
     protein_pdb = _validate_existing_file(protein_pdb, "protein_pdb")
     protein_dir.mkdir(parents=True, exist_ok=True)
 
@@ -330,10 +335,7 @@ def _export_pose_pdbqt_to_sdf_with_meeko(
     ligand_pose: Path,
     ligand_dir: Path,
 ) -> tuple[Path, Path]:
-    """Export a docked PDBQT pose to SDF using Meeko's Python API.
-
-    This follows the same core logic as Meeko's own export implementation.
-    """
+    """Export a docked PDBQT pose to SDF using Meeko's Python API."""
     ligand_pose = _validate_existing_file(ligand_pose, "ligand_pose")
     ligand_dir.mkdir(parents=True, exist_ok=True)
 
@@ -422,15 +424,7 @@ def _prepare_ligand_for_parametrization(
     ligand_pose: Path,
     ligand_dir: Path,
 ) -> tuple[Path, list[Path]]:
-    """Produce the ligand SDF used for parametrization.
-
-    Rules
-    -----
-    - .sdf: copy directly
-    - .pdbqt: export with Meeko Python API
-    - .dlg / .dlg.gz: export with Meeko Python API
-    - otherwise: fail
-    """
+    """Produce the ligand SDF used for parametrization."""
     ligand_pose = _validate_existing_file(ligand_pose, "ligand_pose")
     ligand_dir.mkdir(parents=True, exist_ok=True)
 
@@ -499,11 +493,7 @@ def _find_first_existing_file(directory: Path, patterns: list[str]) -> Path | No
 
 
 def _get_process_work_dir(proc: Any) -> Path | None:
-    """Best-effort access to the BioSimSpace process work directory.
-
-    Different BioSimSpace versions expose this slightly differently, so this
-    helper is intentionally defensive.
-    """
+    """Best-effort access to the BioSimSpace process work directory."""
     candidates: list[Any] = []
 
     if hasattr(proc, "workDir"):
@@ -534,21 +524,7 @@ def _collect_native_md_outputs(
     proc: Any,
     md_dir: Path,
 ) -> NativeMDOutputs:
-    """Collect native GROMACS artefacts from the BioSimSpace process work directory.
-
-    Why this exists
-    ---------------
-    For GBSA or later trajectory analysis, a final-frame PDB is not enough.
-    We therefore locate the actual GROMACS outputs generated by the process and
-    copy stable copies into `work_dir/md/`.
-
-    Notes:
-    -----
-    - The exact filenames can vary between BioSimSpace/GROMACS versions.
-    - The function therefore searches by extension/pattern instead of assuming
-      one fixed basename.
-    - Missing files are tolerated and returned as None.
-    """
+    """Collect native GROMACS artefacts from the BioSimSpace process work directory."""
     md_dir = Path(md_dir).expanduser().resolve()
     md_dir.mkdir(parents=True, exist_ok=True)
 
@@ -627,10 +603,157 @@ def _build_failure_payload(
     }
 
 
+def _merge_gromacs_params(
+    base_params: GromacsParams,
+    updates: Mapping[str, Any],
+) -> GromacsParams:
+    """Merge GROMACS parameters using GROMACS-style hyphenated keys."""
+    merged = base_params.to_mapping()
+    merged.update(updates)
+    return GromacsParams.from_mapping(merged)
+
+
+def _build_test_stage_params(
+    base_params: GromacsParams,
+) -> tuple[GromacsParams, GromacsParams, GromacsParams]:
+    """Build a short test protocol: minimization -> heating -> short production."""
+    minimization = _merge_gromacs_params(
+        base_params,
+        {
+            "integrator": "steep",
+            "nsteps": 1000,
+            "emtol": 1000.0,
+            "emstep": 0.01,
+            "tcoupl": "no",
+            "pcoupl": "no",
+            "gen-vel": "no",
+            "continuation": False,
+            "nstlog": 100,
+            "nstenergy": 100,
+            "nstxout": 0,
+            "nstvout": 0,
+            "nstfout": 0,
+            "nstxout-compressed": 0,
+        },
+    )
+
+    heating = _merge_gromacs_params(
+        base_params,
+        {
+            "dt": 0.001,
+            "nsteps": 5000,
+            "tcoupl": "v-rescale",
+            "tc-grps": "System",
+            "tau-t": 0.1,
+            "ref-t": 300.0,
+            "pcoupl": "no",
+            "gen-vel": "yes",
+            "gen-temp": 300.0,
+            "gen-seed": -1,
+            "continuation": False,
+            "nstlog": 500,
+            "nstenergy": 500,
+            "nstxout-compressed": 500,
+        },
+    )
+
+    production = _merge_gromacs_params(
+        base_params,
+        {
+            "dt": 0.001,
+            "nsteps": 20000,
+            "tcoupl": "v-rescale",
+            "tc-grps": "System",
+            "tau-t": 0.1,
+            "ref-t": 300.0,
+            "pcoupl": "no",
+            "gen-vel": "no",
+            "continuation": True,
+            "nstlog": 500,
+            "nstenergy": 500,
+            "nstxout-compressed": 500,
+        },
+    )
+
+    return minimization, heating, production
+
+
+def _run_gromacs_stage(
+    *,
+    stage_name: str,
+    system: Any,
+    params: GromacsParams,
+    stage_dir: Path,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Run one GROMACS stage and return (final_system, process, stage_info).
+
+    Policy
+    ------
+    First try with normal grompp behavior. If a known, explicitly tolerated
+    grompp warning is encountered during process construction, log the full
+    warning and retry once with ``ignore_warnings=True``.
+    """
+    stage_dir = Path(stage_dir).expanduser().resolve()
+    stage_dir.mkdir(parents=True, exist_ok=True)
+
+    mdp_path = stage_dir / f"{stage_name}.mdp"
+    mdp_path.write_text(params.to_mdp(), encoding="utf-8")
+
+    protocol = GromacsCustom(params=params)
+
+    used_ignore_warnings = False
+    tolerated_warning: str | None = None
+
+    try:
+        proc = BSS.Process.Gromacs(
+            system,
+            protocol=protocol,
+            work_dir=str(stage_dir),
+        )
+    except RuntimeError as exc:
+        if not _is_tolerable_grompp_warning(exc):
+            raise
+
+        tolerated_warning = str(exc)
+        used_ignore_warnings = True
+
+        LOGGER.warning(
+            "Known grompp warning encountered during %s setup. Retrying with ignore_warnings=True.\n%s",
+            stage_name,
+            tolerated_warning,
+        )
+
+        proc = BSS.Process.Gromacs(
+            system,
+            protocol=protocol,
+            work_dir=str(stage_dir),
+            ignore_warnings=True,
+        )
+
+    proc.start()
+    proc.wait()
+
+    final_system = proc.getSystem(block=True)
+
+    work_dir = _get_process_work_dir(proc)
+
+    stage_info: dict[str, Any] = {
+        "directory": str(stage_dir),
+        "mdp_file": str(mdp_path),
+        "params": params.to_mapping(),
+        "work_dir": str(work_dir) if work_dir else None,
+        "used_ignore_warnings": used_ignore_warnings,
+        "tolerated_warning": tolerated_warning,
+    }
+
+    return final_system, proc, stage_info
+
+
 def run_md(inp: MDInput) -> MDResult:
     """Run the combined MD stage.
 
-    This is the main importable entry point for workflow wrappers.
+    Current default MD behavior is a short test protocol:
+    minimization -> short heating (NVT) -> short production (NVT).
     """
     protein_pdb = _validate_existing_file(inp.protein_pdb, "protein_pdb")
     ligand_pose = _validate_existing_file(inp.ligand_pose, "ligand_pose")
@@ -657,7 +780,7 @@ def run_md(inp: MDInput) -> MDResult:
     LOGGER.info("Work dir    : %s", work_dir)
 
     try:
-        LOGGER.info("[1/5] Preparing protein and ligand for parametrization")
+        LOGGER.info("[1/7] Preparing protein and ligand for parametrization")
         prepared_protein_pdb, protein_log = _prepare_protein_pdb_for_parametrization(
             protein_pdb,
             protein_dir,
@@ -673,7 +796,7 @@ def run_md(inp: MDInput) -> MDResult:
         for log_path in ligand_logs:
             LOGGER.info("Ligand log  : %s", log_path)
 
-        LOGGER.info("[2/5] Parametrizing system")
+        LOGGER.info("[2/7] Parametrizing system")
         complex_ = parametrize(
             ParametrizationInput(
                 protein_pdb=prepared_protein_pdb,
@@ -686,7 +809,7 @@ def run_md(inp: MDInput) -> MDResult:
         LOGGER.info("GRO         : %s", complex_.gro_file)
         LOGGER.info("TOP         : %s", complex_.top_file)
 
-        LOGGER.info("[3/5] Preparing PDB snapshots")
+        LOGGER.info("[3/7] Preparing PDB snapshots")
         parametrized_pdb: Path | None = None
         unsolvated_bss_system = _load_bss_system_from_gromacs(
             gro_file=complex_.gro_file,
@@ -702,7 +825,7 @@ def run_md(inp: MDInput) -> MDResult:
         solvated_complex: SolvatedComplex | None = None
         solvated_pdb: Path | None = None
 
-        LOGGER.info("[4/5] Solvation")
+        LOGGER.info("[4/7] Solvation")
         if inp.solvate:
             solvated_complex = solvate_openmm(
                 parametrized=complex_,
@@ -724,16 +847,37 @@ def run_md(inp: MDInput) -> MDResult:
             LOGGER.info("Solvation   : skipped")
             bss_system = unsolvated_bss_system
 
-        LOGGER.info("[5/5] Running first GROMACS MD")
-        protocol = GromacsCustom(params=inp.gromacs_params)
-        proc = BSS.Process.Gromacs(bss_system, protocol=protocol)
-        proc.start()
-        proc.wait()
-        LOGGER.info("GROMACS run finished")
+        min_params, heat_params, prod_params = _build_test_stage_params(inp.gromacs_params)
+        stage_info: dict[str, Any] = {}
+
+        LOGGER.info("[5/7] Energy minimization")
+        min_system, _min_proc, stage_info["minimization"] = _run_gromacs_stage(
+            stage_name="minimization",
+            system=bss_system,
+            params=min_params,
+            stage_dir=md_dir / "minimization",
+        )
+        LOGGER.info("Minimization finished")
+
+        LOGGER.info("[6/7] Heating (short NVT)")
+        heat_system, _heat_proc, stage_info["heating"] = _run_gromacs_stage(
+            stage_name="heating",
+            system=min_system,
+            params=heat_params,
+            stage_dir=md_dir / "heating",
+        )
+        LOGGER.info("Heating finished")
+
+        LOGGER.info("[7/7] Short production (NVT)")
+        final_system, prod_proc, stage_info["production"] = _run_gromacs_stage(
+            stage_name="production",
+            system=heat_system,
+            params=prod_params,
+            stage_dir=md_dir / "production",
+        )
+        LOGGER.info("Short production finished")
 
         final_md_pdb: Path | None = None
-        final_system = proc.getSystem(block=True)
-
         if inp.save_md_final_pdb:
             final_md_pdb = _save_system_as_pdb(
                 final_system,
@@ -745,7 +889,7 @@ def run_md(inp: MDInput) -> MDResult:
 
         if inp.save_md_native_outputs:
             native_md_outputs = _collect_native_md_outputs(
-                proc=proc,
+                proc=prod_proc,
                 md_dir=md_dir,
             )
         else:
@@ -768,6 +912,7 @@ def run_md(inp: MDInput) -> MDResult:
             final_md_pdb=final_md_pdb,
             native_md_outputs=native_md_outputs,
             manifest_path=manifest_path if inp.save_manifest else None,
+            stage_info=stage_info,
         )
 
         if inp.save_manifest:
@@ -802,15 +947,7 @@ def run_md_from_docking(
     save_md_native_outputs: bool = True,
     md_output_stem: str = "md_final",
 ) -> MDResult:
-    """Run the preferred docking-pose to MD workflow.
-
-    - dock with Vina -> PDBQT or DLG
-    - export pose with Meeko -> SDF
-    - parametrize that SDF
-    - solvate
-    - run first MD
-    - keep both final snapshot and native trajectory outputs.
-    """
+    """Run the preferred docking-pose to MD workflow."""
     inp = MDInput(
         protein_pdb=Path(protein_pdb),
         ligand_pose=Path(docked_ligand_pose),

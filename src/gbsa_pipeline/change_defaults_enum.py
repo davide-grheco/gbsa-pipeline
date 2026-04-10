@@ -1,13 +1,30 @@
-"""Classes for availible options in gms parameters."""
+# /home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/change_defaults_enum.py
+
+"""Classes for available options in GROMACS parameters."""
+
+from __future__ import annotations
 
 from enum import StrEnum
 
 
 class Integrator(StrEnum):
-    """Integration algorithm for time propagation of equations of motion."""
+    """Integration or minimization algorithm."""
 
+    # MD / dynamics
     LEAP_FROG = "md"
     VELOCITY_VERLET = "md-vv"
+    VELOCITY_VERLET_AVEK = "md-vv-avek"
+    STOCHASTIC_DYNAMICS = "sd"
+    BROWNIAN_DYNAMICS = "bd"
+
+    # energy minimization / special modes
+    STEEPEST_DESCENT = "steep"
+    CONJUGATE_GRADIENT = "cg"
+    LBFGS = "l-bfgs"
+    NORMAL_MODE = "nm"
+    TEST_PARTICLE_INSERTION = "tpi"
+
+    # backward-compatible aliases
     LEAP_FROG_STOCHASTIC = "sd"
     LANGEVIN = "bd"
 
@@ -25,7 +42,7 @@ class NghCutoffScheme(StrEnum):
     """Neighbor-list and cutoff handling scheme."""
 
     VERLET = "Verlet"
-    GROUP = "group"
+    GROUP = "group"  # legacy token; no longer supported by current GROMACS
 
 
 class CoulombType(StrEnum):
@@ -49,9 +66,10 @@ class VDWType(StrEnum):
     """Method for computing van der Waals interactions."""
 
     CUT_OFF = "Cut-off"
-    SHIFT = "Shift"
     PME = "PME"
-    Switch = "Switch"
+    SHIFT = "Shift"
+    SWITCH = "Switch"
+    USER = "User"
 
 
 class DispCorr(StrEnum):
@@ -65,10 +83,13 @@ class DispCorr(StrEnum):
 class VDWModifier(StrEnum):
     """Modifier applied to Lennard-Jones interactions near cutoff."""
 
-    POTENTIAL_SHIFT = "Potential_Shift"
+    POTENTIAL_SHIFT = "Potential-shift"
     NONE = "None"
     FORCE_SWITCH = "Force-switch"
-    POTENTIAL_SWITCH = "potential-switch"
+    POTENTIAL_SWITCH = "Potential-switch"
+
+    # backward-compatible alias for old typo/spelling
+    POTENTIAL_SHIFT_UNDERSCORE = "Potential-shift"
 
 
 class LJPMECombination(StrEnum):
@@ -84,6 +105,7 @@ class EnsembleTempSetting(StrEnum):
     AUTO = "auto"
     CONSTANT = "constant"
     VARIABLE = "variable"
+    NOT_AVAILABLE = "not-available"
 
 
 class Thermostat(StrEnum):
@@ -94,6 +116,9 @@ class Thermostat(StrEnum):
     NOSE_HOOVER = "nose-hoover"
     ANDERSEN = "andersen"
     ANDERSEN_MASSIVE = "andersen-massive"
+    V_RESCALE = "v-rescale"
+
+    # backward-compatible alias
     VRESCALE = "v-rescale"
 
 
@@ -127,8 +152,13 @@ class Constraints(StrEnum):
     """Bond/angle constraint type applied during simulation."""
 
     NONE = "none"
-    HYDROGENS_BONDS = "h-bonds"
+    H_BONDS = "h-bonds"
     ALL_BONDS = "all-bonds"
+    H_ANGLES = "h-angles"
+    ALL_ANGLES = "all-angles"
+
+    # backward-compatible aliases
+    HYDROGENS_BONDS = "h-bonds"
     HANGLES = "h-angles"
     AANGLES = "all-angles"
 

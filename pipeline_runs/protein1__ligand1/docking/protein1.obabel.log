@@ -1,0 +1,17 @@
+Open Babel receptor conversion log for protein1.pdb
+===================================================
+
+Command:
+obabel /home/grheco/repositorios/gbsa-pipeline/data/complex1/protein1.pdb -O /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/protein1.pdbqt -xr -xn -xp -xh
+
+Return code:
+0
+
+STDOUT
+------
+
+
+STDERR
+------
+1 molecule converted
+
