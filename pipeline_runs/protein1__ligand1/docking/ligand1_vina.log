@@ -1,0 +1,63 @@
+Vina docking log for ligand1.pdbqt
+==================================
+
+Command:
+vina --receptor /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/protein1.pdbqt --ligand /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1.pdbqt --center_x -0.26335 --center_y 0.6140499999999998 --center_z 1.22595 --size_x 20.0 --size_y 21.5473 --size_z 20.0 --out /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1_vina_out.pdbqt --seed 42 --num_modes 9 --exhaustiveness 16 --energy_range 3.0
+
+Return code:
+0
+
+STDOUT
+------
+AutoDock Vina 7ac2999-mod
+#################################################################
+# If you used AutoDock Vina in your work, please cite:          #
+#                                                               #
+# J. Eberhardt, D. Santos-Martins, A. F. Tillack, and S. Forli  #
+# AutoDock Vina 1.2.0: New Docking Methods, Expanded Force      #
+# Field, and Python Bindings, J. Chem. Inf. Model. (2021)       #
+# DOI 10.1021/acs.jcim.1c00203                                  #
+#                                                               #
+# O. Trott, A. J. Olson,                                        #
+# AutoDock Vina: improving the speed and accuracy of docking    #
+# with a new scoring function, efficient optimization and       #
+# multithreading, J. Comp. Chem. (2010)                         #
+# DOI 10.1002/jcc.21334                                         #
+#                                                               #
+# Please see https://github.com/ccsb-scripps/AutoDock-Vina for  #
+# more information.                                             #
+#################################################################
+
+Scoring function : vina
+Rigid receptor: /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/protein1.pdbqt
+Ligand: /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1.pdbqt
+Grid center: X -0.26335 Y 0.61405 Z 1.22595
+Grid size  : X 20 Y 21.5473 Z 20
+Grid space : 0.375
+Exhaustiveness: 16
+CPU: 0
+Verbosity: 1
+
+Computing Vina grid ... done.
+Performing docking (random seed: 42) ... 
+0%   10   20   30   40   50   60   70   80   90   100%
+|----|----|----|----|----|----|----|----|----|----|
+***************************************************
+
+mode |   affinity | dist from best mode
+     | (kcal/mol) | rmsd l.b.| rmsd u.b.
+-----+------------+----------+----------
+   1            0          0          0
+   2     0.006084      7.109      9.796
+   3      0.00717      8.783      11.47
+   4     0.007341      7.367      9.816
+   5     0.007955      8.654      9.772
+   6      0.01215       9.35      11.15
+   7      0.01697      6.439      9.161
+   8      0.01896      4.408      5.339
+   9      0.02304      5.462      10.97
+
+
+STDERR
+------
+

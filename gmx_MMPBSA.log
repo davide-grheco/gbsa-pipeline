@@ -1,0 +1,15 @@
+[INFO   ] Starting gmx_MMPBSA v1.5.6
+[DEBUG  ] WDIR          : /home/grheco/repositorios/gbsa-pipeline
+[DEBUG  ] AMBERHOME     : /home/grheco/repositorios/gbsa-pipeline/.pixi/envs/gmxmmpbsa
+[DEBUG  ] PYTHON EXE    : /home/grheco/repositorios/gbsa-pipeline/.pixi/envs/gmxmmpbsa/bin/python
+[DEBUG  ] PYTHON VERSION: 3.11.15 | packaged by conda-forge | (main, Mar  5 2026, 16:45:40) [GCC 14.3.0]
+[DEBUG  ] MPI           : /home/grheco/repositorios/gbsa-pipeline/.pixi/envs/gmxmmpbsa/bin/mpirun
+[DEBUG  ] ParmEd        : 4.3.1
+[DEBUG  ] OS PLATFORM   : Linux-6.8.0-107-generic-x86_64-with-glibc2.39
+[DEBUG  ] OS SYSTEM     : Linux
+[DEBUG  ] OS VERSION    : #107-Ubuntu SMP PREEMPT_DYNAMIC Fri Mar 13 19:51:50 UTC 2026
+[DEBUG  ] OS PROCESSOR  : x86_64
+
+[INFO   ] Command-line
+  gmx_MMPBSA --help
+

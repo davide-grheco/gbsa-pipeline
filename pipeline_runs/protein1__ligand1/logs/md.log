@@ -1,0 +1,223 @@
+
+╒═════════════════════════════════════════════════════════════════════════════════════════════════╕
+│                                         STEP MD STARTED                                         │
+╞═════════════════════════════════════════════════════════════════════════════════════════════════╡
+│ timestamp : 2026-04-09 13:52:38 UTC                                                             │
+│ log file  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/logs/md.log │
+╘═════════════════════════════════════════════════════════════════════════════════════════════════╛
+
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ MD inputs                                                                                                              │
+├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ protein pdb   : /home/grheco/repositorios/gbsa-pipeline/data/complex1/protein1.pdb                                     │
+│ docked pose   : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1_vina_out.pdbqt │
+│ work dir      : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md                             │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+╒══════════════════════════════════════════╕
+│                    MD                    │
+╘══════════════════════════════════════════╛
+
+Protein PDB : /home/grheco/repositorios/gbsa-pipeline/data/complex1/protein1.pdb
+Ligand pose : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1_vina_out.pdbqt
+Work dir    : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md
+[1/7] Preparing protein and ligand for parametrization
+[ligand] exporting ligand1_vina_out.pdbqt -> ligand_for_parametrization.sdf with Meeko Python API
+Protein PDB : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/protein/protein_for_parametrization.pdb
+Protein log : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/protein/protein_preparation.log
+Ligand SDF  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/ligand/ligand_for_parametrization.sdf
+Ligand log  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/ligand/ligand_pose_to_sdf.meeko.log
+[2/7] Parametrizing system
+
+╒═════════════════════════════════════════════════════════════════════════════════════════════════╕
+│                                         STEP MD STARTED                                         │
+╞═════════════════════════════════════════════════════════════════════════════════════════════════╡
+│ timestamp : 2026-04-09 14:52:05 UTC                                                             │
+│ log file  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/logs/md.log │
+╘═════════════════════════════════════════════════════════════════════════════════════════════════╛
+
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ MD inputs                                                                                                              │
+├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ protein pdb   : /home/grheco/repositorios/gbsa-pipeline/data/complex1/protein1.pdb                                     │
+│ docked pose   : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1_vina_out.pdbqt │
+│ work dir      : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md                             │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+╒══════════════════════════════════════════╕
+│                    MD                    │
+╘══════════════════════════════════════════╛
+
+Protein PDB : /home/grheco/repositorios/gbsa-pipeline/data/complex1/protein1.pdb
+Ligand pose : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1_vina_out.pdbqt
+Work dir    : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md
+[1/7] Preparing protein and ligand for parametrization
+[ligand] exporting ligand1_vina_out.pdbqt -> ligand_for_parametrization.sdf with Meeko Python API
+Protein PDB : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/protein/protein_for_parametrization.pdb
+Protein log : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/protein/protein_preparation.log
+Ligand SDF  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/ligand/ligand_for_parametrization.sdf
+Ligand log  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/ligand/ligand_pose_to_sdf.meeko.log
+[2/7] Parametrizing system
+GRO         : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/parametrization/complex.gro
+TOP         : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/parametrization/complex.top
+[3/7] Preparing PDB snapshots
+Param PDB   : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/parametrization/complex_parametrized.pdb
+[4/7] Solvation
+Solv GRO    : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/solvation/solvated.gro
+Solv TOP    : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/solvation/solvated.top
+Solv PDB    : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/solvation/solvated.pdb
+[5/7] Energy minimization
+MD stage failed
+Traceback (most recent call last):
+  File "/home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/md.py", line 805, in run_md
+    min_system, _min_proc, stage_info["minimization"] = _run_gromacs_stage(
+                                                        ^^^^^^^^^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/md.py", line 687, in _run_gromacs_stage
+    proc = BSS.Process.Gromacs(system, protocol=protocol, work_dir=str(stage_dir))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/.pixi/envs/gmxmmpbsa/lib/python3.11/site-packages/BioSimSpace/Process/_gromacs.py", line 217, in __init__
+    self._setup(**kwargs)
+  File "/home/grheco/repositorios/gbsa-pipeline/.pixi/envs/gmxmmpbsa/lib/python3.11/site-packages/BioSimSpace/Process/_gromacs.py", line 296, in _setup
+    self.setConfig(self._protocol.getConfig())
+  File "/home/grheco/repositorios/gbsa-pipeline/.pixi/envs/gmxmmpbsa/lib/python3.11/site-packages/BioSimSpace/Process/_gromacs.py", line 716, in setConfig
+    self._generate_binary_run_file(
+  File "/home/grheco/repositorios/gbsa-pipeline/.pixi/envs/gmxmmpbsa/lib/python3.11/site-packages/BioSimSpace/Process/_gromacs.py", line 647, in _generate_binary_run_file
+    raise RuntimeError(exception_string)
+RuntimeError: Unable to generate GROMACS binary run input file.
+
+'gmx grompp' reported the following warnings:
+WARNING 1 [file /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/md/minimization/gromacs.mdp]:
+  The largest distance between excluded atoms is 2.142 nm between atom 3940
+  and 3942, which is larger than the cut-off distance. This will lead to
+  missing long-range corrections in the forces and energies. If you expect
+  that minimization will bring such distances within the cut-off, you can
+  ignore this warning.
+
+Use 'ignore_warnings' to ignore warnings.
+Traceback (most recent call last):
+  File "/home/grheco/repositorios/gbsa-pipeline/scripts/runner.py", line 702, in _run_stage_wrapped
+    result = runner(args, run_dir, state)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/scripts/runner.py", line 876, in run_md_stage
+    result = run_md_from_docking(
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/md.py", line 919, in run_md_from_docking
+    return run_md(inp)
+           ^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/md.py", line 805, in run_md
+    min_system, _min_proc, stage_info["minimization"] = _run_gromacs_stage(
+                                                        ^^^^^^^^^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/md.py", line 687, in _run_gromacs_stage
+    proc = BSS.Process.Gromacs(system, protocol=protocol, work_dir=str(stage_dir))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/.pixi/envs/gmxmmpbsa/lib/python3.11/site-packages/BioSimSpace/Process/_gromacs.py", line 217, in __init__
+    self._setup(**kwargs)
+  File "/home/grheco/repositorios/gbsa-pipeline/.pixi/envs/gmxmmpbsa/lib/python3.11/site-packages/BioSimSpace/Process/_gromacs.py", line 296, in _setup
+    self.setConfig(self._protocol.getConfig())
+  File "/home/grheco/repositorios/gbsa-pipeline/.pixi/envs/gmxmmpbsa/lib/python3.11/site-packages/BioSimSpace/Process/_gromacs.py", line 716, in setConfig
+    self._generate_binary_run_file(
+  File "/home/grheco/repositorios/gbsa-pipeline/.pixi/envs/gmxmmpbsa/lib/python3.11/site-packages/BioSimSpace/Process/_gromacs.py", line 647, in _generate_binary_run_file
+    raise RuntimeError(exception_string)
+RuntimeError: Unable to generate GROMACS binary run input file.
+
+'gmx grompp' reported the following warnings:
+WARNING 1 [file /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/md/minimization/gromacs.mdp]:
+  The largest distance between excluded atoms is 2.142 nm between atom 3940
+  and 3942, which is larger than the cut-off distance. This will lead to
+  missing long-range corrections in the forces and energies. If you expect
+  that minimization will bring such distances within the cut-off, you can
+  ignore this warning.
+
+Use 'ignore_warnings' to ignore warnings.
+
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ STEP MD FAILED                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ timestamp : 2026-04-09 16:19:16 UTC                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             │
+│ elapsed   : 01:27:10.90                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         │
+│ error     : RuntimeError: Unable to generate GROMACS binary run input file.
+
+'gmx grompp' reported the following warnings:
+WARNING 1 [file /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/md/minimization/gromacs.mdp]:
+  The largest distance between excluded atoms is 2.142 nm between atom 3940
+  and 3942, which is larger than the cut-off distance. This will lead to
+  missing long-range corrections in the forces and energies. If you expect
+  that minimization will bring such distances within the cut-off, you can
+  ignore this warning.
+
+Use 'ignore_warnings' to ignore warnings. │
+│ log file  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/logs/md.log                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+╒═════════════════════════════════════════════════════════════════════════════════════════════════╕
+│                                         STEP MD STARTED                                         │
+╞═════════════════════════════════════════════════════════════════════════════════════════════════╡
+│ timestamp : 2026-04-10 06:39:30 UTC                                                             │
+│ log file  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/logs/md.log │
+╘═════════════════════════════════════════════════════════════════════════════════════════════════╛
+
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ MD inputs                                                                                                              │
+├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ protein pdb   : /home/grheco/repositorios/gbsa-pipeline/data/complex1/protein1.pdb                                     │
+│ docked pose   : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1_vina_out.pdbqt │
+│ work dir      : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md                             │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+╒══════════════════════════════════════════╕
+│                    MD                    │
+╘══════════════════════════════════════════╛
+
+Protein PDB : /home/grheco/repositorios/gbsa-pipeline/data/complex1/protein1.pdb
+Ligand pose : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1_vina_out.pdbqt
+Work dir    : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md
+[1/7] Preparing protein and ligand for parametrization
+[ligand] exporting ligand1_vina_out.pdbqt -> ligand_for_parametrization.sdf with Meeko Python API
+Protein PDB : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/protein/protein_for_parametrization.pdb
+Protein log : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/protein/protein_preparation.log
+Ligand SDF  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/ligand/ligand_for_parametrization.sdf
+Ligand log  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/ligand/ligand_pose_to_sdf.meeko.log
+[2/7] Parametrizing system
+MD stage failed
+Traceback (most recent call last):
+  File "/home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/md.py", line 801, in run_md
+    complex_ = parametrize(
+               ^^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/parametrization.py", line 125, in parametrize
+    return _parametrize_openmm(inp)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/parametrization.py", line 263, in _parametrize_openmm
+    structure.save(str(top_file), format="gromacs")
+  File "/home/grheco/repositorios/gbsa-pipeline/.pixi/envs/gmxmmpbsa/lib/python3.11/site-packages/parmed/structure.py", line 1506, in save
+    raise IOError('%s exists; not overwriting' % fname)
+OSError: /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/parametrization/complex.top exists; not overwriting
+Traceback (most recent call last):
+  File "/home/grheco/repositorios/gbsa-pipeline/scripts/runner.py", line 702, in _run_stage_wrapped
+    result = runner(args, run_dir, state)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/scripts/runner.py", line 876, in run_md_stage
+    result = run_md_from_docking(
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/md.py", line 969, in run_md_from_docking
+    return run_md(inp)
+           ^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/md.py", line 801, in run_md
+    complex_ = parametrize(
+               ^^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/parametrization.py", line 125, in parametrize
+    return _parametrize_openmm(inp)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/parametrization.py", line 263, in _parametrize_openmm
+    structure.save(str(top_file), format="gromacs")
+  File "/home/grheco/repositorios/gbsa-pipeline/.pixi/envs/gmxmmpbsa/lib/python3.11/site-packages/parmed/structure.py", line 1506, in save
+    raise IOError('%s exists; not overwriting' % fname)
+OSError: /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/parametrization/complex.top exists; not overwriting
+
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ STEP MD FAILED                                                                                                                                      │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ timestamp : 2026-04-10 07:57:59 UTC                                                                                                                 │
+│ elapsed   : 01:18:29.24                                                                                                                             │
+│ error     : OSError: /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/parametrization/complex.top exists; not overwriting │
+│ log file  : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/logs/md.log                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘

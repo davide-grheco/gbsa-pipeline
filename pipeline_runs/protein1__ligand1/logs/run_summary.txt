@@ -1,0 +1,16 @@
+╒════════════════════════════════════════════════════════════════════════════════════════════════════════════╕
+│                                                RUN SUMMARY                                                 │
+╞════════════════════════════════════════════════════════════════════════════════════════════════════════════╡
+│ run dir      : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1                     │
+│ state file   : /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/pipeline_state.json │
+│ status       : failed                                                                                      │
+│ failed stage : md                                                                                          │
+╘════════════════════════════════════════════════════════════════════════════════════════════════════════════╛
+
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Stage overview                                                                                                             │
+├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ docking  | done    | 02:30.02   | /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/logs/docking.log │
+│ md       | failed  | 01:18:29.24 | /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/logs/md.log     │
+│ gbsa     | pending | --         | --                                                                                       │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘

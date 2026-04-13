@@ -1,0 +1,89 @@
+{
+  "created_at": "2026-04-09 13:50:08 UTC",
+  "docking": {
+    "box": {
+      "center": [
+        -0.26335,
+        0.6140499999999998,
+        1.22595
+      ],
+      "min_size": 20.0,
+      "padding": 5.0,
+      "size": [
+        20.0,
+        21.5473,
+        20.0
+      ]
+    },
+    "engine": "vina",
+    "ligand_for_docking": "/home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1.pdbqt",
+    "ligand_input": "/home/grheco/repositorios/gbsa-pipeline/data/complex1/ligand1.sdf",
+    "manifest_path": "/home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/result.json",
+    "parameters": {
+      "energy_range": 3.0,
+      "exhaustiveness": 16,
+      "num_modes": 9
+    },
+    "poses": [
+      {
+        "engine": "vina",
+        "ligand": "/home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1.pdbqt",
+        "metadata": {
+          "log_file": "/home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1_vina.log",
+          "output_exists": true,
+          "receptor_used": "/home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/protein1.pdbqt",
+          "returncode": 0
+        },
+        "pose_path": "/home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1_vina_out.pdbqt",
+        "rank": 1,
+        "score": 0.0
+      }
+    ],
+    "protein_pdb": "/home/grheco/repositorios/gbsa-pipeline/data/complex1/protein1.pdb",
+    "selected_pose": "/home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1_vina_out.pdbqt",
+    "selected_score": 0.0,
+    "status": "success",
+    "work_dir": "/home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking"
+  },
+  "failed_stage": "md",
+  "gbsa": null,
+  "last_updated": "2026-04-10 07:57:59 UTC",
+  "logs_dir": "/home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/logs",
+  "md": null,
+  "progress": {
+    "docking": {
+      "elapsed_seconds": 150.02,
+      "elapsed_text": "02:30.02",
+      "error": null,
+      "finished_at": "2026-04-09 13:52:38 UTC",
+      "log_file": "/home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/logs/docking.log",
+      "started_at": "2026-04-09 13:50:08 UTC",
+      "status": "done"
+    },
+    "gbsa": {
+      "elapsed_seconds": null,
+      "elapsed_text": null,
+      "error": null,
+      "finished_at": null,
+      "log_file": null,
+      "started_at": null,
+      "status": "pending"
+    },
+    "md": {
+      "elapsed_seconds": 4709.238,
+      "elapsed_text": "01:18:29.24",
+      "error": "OSError: /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/parametrization/complex.top exists; not overwriting",
+      "finished_at": "2026-04-10 07:57:59 UTC",
+      "log_file": "/home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/logs/md.log",
+      "started_at": "2026-04-10 06:39:30 UTC",
+      "status": "failed"
+    }
+  },
+  "run_dir": "/home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1",
+  "selected_stages": [
+    "md",
+    "gbsa"
+  ],
+  "state_file": "/home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/pipeline_state.json",
+  "status": "failed"
+}

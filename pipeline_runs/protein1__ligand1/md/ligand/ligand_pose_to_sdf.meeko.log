@@ -1,0 +1,10 @@
+Meeko export log for ligand1_vina_out.pdbqt
+===========================================
+
+Input file: /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/docking/ligand1_vina_out.pdbqt
+Output file: /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/ligand/ligand_for_parametrization.sdf
+is_dlg: False
+Number of failures: 0
+
+Conversion succeeded.
+Wrote SDF: /home/grheco/repositorios/gbsa-pipeline/pipeline_runs/protein1__ligand1/md/ligand/ligand_for_parametrization.sdf
