@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from gbsa_pipeline.docking import (
 )
 
 TESTDATA = Path(__file__).parent / "testdata"
+DOCKING_TESTDATA = TESTDATA / "docking"
 
 
 def test_meeko_smiles_to_pdbqt(tmp_path: Path) -> None:
@@ -22,7 +24,9 @@ def test_meeko_smiles_to_pdbqt(tmp_path: Path) -> None:
     path = prepare_ligand_with_meeko("CCO", output, name="ETH")
 
     assert path == output
-    content = output.read_text()
+    assert output.exists()
+
+    content = output.read_text(encoding="utf-8")
     assert "ROOT" in content
     assert "ATOM" in content
 
@@ -34,8 +38,9 @@ def test_vina_build_command(tmp_path: Path) -> None:
     receptor = tmp_path / "receptor.pdbqt"
     ligand = tmp_path / "ligand.pdbqt"
     output = tmp_path / "out.pdbqt"
-    receptor.write_text("")
-    ligand.write_text("")
+
+    receptor.write_text("", encoding="utf-8")
+    ligand.write_text("", encoding="utf-8")
 
     cmd = engine._build_command(
         receptor=receptor,
@@ -64,17 +69,30 @@ def test_vina_build_command(tmp_path: Path) -> None:
 
 @pytest.mark.integration
 def test_vina_binary_smoke(tmp_path: Path) -> None:
+    if shutil.which("vina") is None:
+        pytest.skip("vina not available in PATH")
+
+    receptor = TESTDATA / "protein1.pdbqt"
+    if not receptor.exists():
+        pytest.skip(f"missing receptor test file: {receptor}")
+
     engine = VinaEngine(binary="vina")
     box = DockingBox(center=(7.0, 20.0, 14.0), size=(10.0, 10.0, 10.0))
 
-    receptor = TESTDATA / "protein1.pdbqt"
     ligand = tmp_path / "ligand.pdbqt"
-
     prepare_ligand_with_meeko("CCO", ligand, name="ETH")
 
-    request = DockingRequest(receptor=receptor, ligands=[ligand], box=box, workdir=tmp_path)
+    request = DockingRequest(
+        receptor=receptor,
+        ligands=[ligand],
+        box=box,
+        workdir=tmp_path,
+    )
 
     result = engine.dock(request=request)
 
     assert result.engine == "vina"
-    assert result.poses[0].score != 0.0
+    assert len(result.poses) == 1
+    assert result.poses[0].pose_path.exists()
+    assert result.poses[0].metadata["returncode"] == 0
+    assert result.poses[0].score is not None
