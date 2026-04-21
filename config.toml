@@ -1,0 +1,12 @@
+[system]
+protein = "data/PDB/protein.pdb"
+ligand = "data/PDB/ligand1.sdf"
+
+[solvation]
+water_model = "tip3p"
+padding = 10.0
+
+[md]
+nsteps = 500000
+dt = 0.002
+EOF
