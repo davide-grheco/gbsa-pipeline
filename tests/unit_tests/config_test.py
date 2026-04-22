@@ -155,7 +155,7 @@ def test_system_config_defaults() -> None:
 
 def test_system_config_extra_field_forbidden() -> None:
     with pytest.raises(ValidationError):
-        SystemConfig(protein=Path("/p.pdb"), bad_field="x")  # type: ignore[call-arg]
+        SystemConfig(protein=Path("/p.pdb"), bad_field="x")
 
 
 # ---------------------------------------------------------------------------
