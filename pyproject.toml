@@ -123,6 +123,7 @@ ci = "pixi run -e dev check-docs && pixi run -e dev check-quality && pixi run -e
 addopts = "--cov=src --cov-report html"
 markers = [
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+    "optional: mark for demanding/hard cases  (deselect with '-m \"not optional\"')",
 ]
 
 [dependency-groups]
