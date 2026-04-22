@@ -305,7 +305,7 @@ def prepare_ligand_with_meeko(
     output_path: Path,
     name: str | None = None,
 ) -> Path:
-    """Prepare a ligand as ligand PDBQT using RDKit and Meeko."""
+    """Prepare a SMILES string or RDKit molecule as ligand PDBQT."""
     output_path = Path(output_path).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -313,7 +313,6 @@ def prepare_ligand_with_meeko(
 
     if isinstance(ligand, str):
         mol = Chem.MolFromSmiles(ligand)
-
         if mol is None:
             raise ValueError("Failed to parse SMILES.")
 
@@ -330,16 +329,16 @@ def prepare_ligand_with_meeko(
                 "UFF optimization returned non-standard status %s",
                 optimize_status,
             )
-    else:
-        mol = ligand
 
-        if mol is None:
-            raise ValueError("Ligand molecule is None.")
-
+    elif isinstance(ligand, Chem.Mol):
+        mol = Chem.Mol(ligand)
         if name is not None:
             mol.SetProp("_Name", name)
         elif not mol.HasProp("_Name"):
             mol.SetProp("_Name", "LIG")
+
+    else:
+        raise TypeError("prepare_ligand_with_meeko supports only SMILES strings and RDKit Chem.Mol objects.")
 
     prep = MoleculePreparation()
     mol_setups = prep.prepare(mol)
