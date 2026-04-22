@@ -208,6 +208,90 @@ def _build_compact_pose_metadata(
     }
 
 
+def _detect_mk_export_output_flag(mk_export_binary: str) -> str:
+    """Detect the output flag supported by mk_export.py."""
+    process: CompletedProcess[str] = run(  # noqa: S603
+        [mk_export_binary, "-h"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    help_text = (process.stdout or "") + "\n" + (process.stderr or "")
+
+    if "--write_sdf" in help_text:
+        return "-s"
+
+    if re.search(r"(^|\s)-o(\s|,|$)", help_text):
+        return "-o"
+
+    raise RuntimeError(
+        "Could not determine mk_export.py output flag from help text.\n"
+        f"STDOUT:\n{process.stdout}\n"
+        f"STDERR:\n{process.stderr}"
+    )
+
+
+def export_pdbqt_to_sdf(
+    pdbqt_path: Path,
+    output_sdf: Path,
+    *,
+    mk_export_binary: str = "mk_export.py",
+) -> Path:
+    """Export a PDBQT file to SDF using mk_export.py."""
+    if shutil.which(mk_export_binary) is None:
+        raise RuntimeError(f"Meeko export executable not found in PATH: {mk_export_binary}")
+
+    pdbqt_path = Path(pdbqt_path).resolve()
+    output_sdf = Path(output_sdf).resolve()
+    output_sdf.parent.mkdir(parents=True, exist_ok=True)
+
+    if not pdbqt_path.exists():
+        raise FileNotFoundError(f"PDBQT file not found: {pdbqt_path}")
+
+    if not pdbqt_path.is_file():
+        raise ValueError(f"PDBQT path is not a file: {pdbqt_path}")
+
+    output_flag = _detect_mk_export_output_flag(mk_export_binary)
+    log_path = output_sdf.with_suffix(".mk_export.log")
+
+    cmd = [
+        mk_export_binary,
+        str(pdbqt_path),
+        output_flag,
+        str(output_sdf),
+    ]
+
+    process: CompletedProcess[str] = run(  # noqa: S603
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    _write_process_log(
+        log_path,
+        process,
+        command=cmd,
+        title=f"mk_export.py export log for {pdbqt_path.name}",
+    )
+
+    if process.returncode != 0:
+        raise RuntimeError(
+            "mk_export.py failed.\n"
+            f"PDBQT: {pdbqt_path}\n"
+            f"Expected SDF: {output_sdf}\n"
+            f"Log: {log_path}\n"
+            f"stderr summary: {_summarize_stderr(process.stderr)}"
+        )
+
+    if not output_sdf.exists():
+        raise RuntimeError(
+            f"mk_export.py returned success but expected SDF was not created.\nExpected: {output_sdf}\nLog: {log_path}"
+        )
+
+    return output_sdf
+
+
 def convert_receptor_pdb_to_pdbqt(
     receptor_pdb: Path,
     output_path: Path | None = None,
@@ -507,6 +591,9 @@ class VinaEngine:
                 title=f"Vina docking log for {ligand_path.name}",
             )
 
+            score = _parse_vina_best_score(process.stdout)
+            rank = 1 if score is not None else None
+
             pose_metadata = _build_compact_pose_metadata(
                 returncode=process.returncode,
                 log_file=log_file,
@@ -518,8 +605,8 @@ class VinaEngine:
                 DockedPose(
                     ligand=ligand_path,
                     pose_path=out_file,
-                    score=_parse_vina_best_score(process.stdout),
-                    rank=1,
+                    score=score,
+                    rank=rank,
                     engine=self.name,
                     metadata=pose_metadata,
                 )
