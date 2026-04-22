@@ -5,7 +5,6 @@ This module provides:
 - ligand preparation to PDBQT using RDKit + Meeko
 - optional receptor conversion from PDB to receptor PDBQT via Open Babel
 - a small Vina engine wrapper that writes full subprocess output to log files
-  while keeping terminal output compact
 """
 
 from __future__ import annotations
@@ -29,15 +28,6 @@ if TYPE_CHECKING:
 
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.INFO)
-
-if not LOGGER.handlers:
-    handler = logging.StreamHandler()
-    handler.setLevel(logging.INFO)
-    handler.setFormatter(logging.Formatter("%(message)s"))
-    LOGGER.addHandler(handler)
-
-LOGGER.propagate = False
 
 
 class DockingBox(BaseModel):
@@ -64,7 +54,7 @@ class DockingRequest(BaseModel):
     @field_validator("receptor")
     @classmethod
     def _check_receptor_exists(cls, path: Path) -> Path:
-        path = Path(path)
+        path = Path(path).resolve()
 
         if not path.exists():
             raise ValueError(f"Receptor file does not exist: {path}")
@@ -86,13 +76,13 @@ class DockingRequest(BaseModel):
         checked: list[Path] = []
 
         for ligand_entry in ligands:
-            ligand_path = Path(ligand_entry)
+            ligand_path = Path(ligand_entry).resolve()
 
             if not ligand_path.exists():
                 raise ValueError(f"Ligand file missing: {ligand_path}")
 
             if not ligand_path.is_file():
-                raise ValueError(f"Ligand path not file: {ligand_path}")
+                raise ValueError(f"Ligand path is not a file: {ligand_path}")
 
             checked.append(ligand_path)
 
@@ -130,29 +120,8 @@ class DockingEngine(Protocol):
         """Run docking for the provided request."""
 
 
-def _box(title: str, char: str = "=") -> str:
-    line = char * max(len(title), 12)
-    return f"{line}\n{title}\n{line}"
-
-
-def _section(title: str) -> None:
-    LOGGER.info("")
-    LOGGER.info(_box(title))
-
-
-def _step(prefix: str, message: str) -> None:
-    LOGGER.info("[%s] %s", prefix, message)
-
-
-def _warn(prefix: str, message: str) -> None:
-    LOGGER.warning("[%s][warning] %s", prefix, message)
-
-
-def _error(prefix: str, message: str) -> None:
-    LOGGER.error("[%s][error] %s", prefix, message)
-
-
 def _summarize_stderr(stderr: str, max_lines: int = 4) -> str:
+    """Return a short preview of stderr suitable for terminal output."""
     lines = [line.strip() for line in stderr.splitlines() if line.strip()]
     if not lines:
         return "no stderr output"
@@ -174,8 +143,8 @@ def _write_process_log(
     title: str,
 ) -> None:
     """Write complete subprocess stdout/stderr to a plain-text log file."""
-    log_path = Path(log_path).resolve()
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    resolved_log_path = Path(log_path).resolve()
+    resolved_log_path.parent.mkdir(parents=True, exist_ok=True)
 
     text = (
         f"{title}\n"
@@ -189,7 +158,7 @@ def _write_process_log(
         f"------\n"
         f"{process.stderr or ''}\n"
     )
-    log_path.write_text(text)
+    resolved_log_path.write_text(text, encoding="utf-8")
 
 
 def _extract_pdbqt_string_from_meeko_result(result: Any) -> str:
@@ -233,9 +202,9 @@ def _build_compact_pose_metadata(
     """Build compact per-pose metadata stored in the returned result."""
     return {
         "returncode": returncode,
-        "log_file": str(log_file),
+        "log_file": str(Path(log_file).resolve()),
         "output_exists": output_exists,
-        "receptor_used": str(receptor_used),
+        "receptor_used": str(Path(receptor_used).resolve()),
     }
 
 
@@ -285,7 +254,11 @@ def convert_receptor_pdb_to_pdbqt(
     if preserve_hydrogens:
         cmd.append("-xh")
 
-    _step("obabel", f"converting receptor: {receptor_pdb.name} -> {output_path.name}")
+    LOGGER.info(
+        "Converting receptor with Open Babel: %s -> %s",
+        receptor_pdb.name,
+        output_path.name,
+    )
 
     process: CompletedProcess[str] = run(  # noqa: S603
         cmd,
@@ -317,9 +290,12 @@ def convert_receptor_pdb_to_pdbqt(
         )
 
     if process.stderr.strip():
-        _warn("obabel", f"finished with warnings; full details in {log_path.name}")
+        LOGGER.warning(
+            "Open Babel finished with warnings; full details in %s",
+            log_path.name,
+        )
     else:
-        _step("obabel", f"finished successfully; log written to {log_path.name}")
+        LOGGER.info("Open Babel finished successfully; log written to %s", log_path.name)
 
     return output_path
 
@@ -333,7 +309,7 @@ def prepare_ligand_with_meeko(
     output_path = Path(output_path).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    _step("meeko", f"preparing ligand -> {output_path.name}")
+    LOGGER.info("Preparing ligand with Meeko: %s", output_path.name)
 
     if isinstance(ligand, str):
         mol = Chem.MolFromSmiles(ligand)
@@ -350,11 +326,10 @@ def prepare_ligand_with_meeko(
 
         optimize_status = UFFOptimizeMolecule(mol)
         if optimize_status not in (0, 1):
-            _warn(
-                "meeko",
-                f"UFF optimization returned non-standard status {optimize_status}",
+            LOGGER.warning(
+                "UFF optimization returned non-standard status %s",
+                optimize_status,
             )
-
     else:
         mol = ligand
 
@@ -378,8 +353,8 @@ def prepare_ligand_with_meeko(
     if not pdbqt_string.strip():
         raise RuntimeError("Generated ligand PDBQT string is empty.")
 
-    output_path.write_text(pdbqt_string)
-    _step("meeko", f"ligand PDBQT written: {output_path.name}")
+    output_path.write_text(pdbqt_string, encoding="utf-8")
+    LOGGER.info("Ligand PDBQT written: %s", output_path.name)
 
     return output_path
 
@@ -393,13 +368,13 @@ class VinaEngine:
         self,
         binary: str = "vina",
         obabel_binary: str = "obabel",
-    ):
+    ) -> None:
         """Initialize Vina and Open Babel executable names."""
         if shutil.which(binary) is None:
-            _warn("vina", f"binary not found in PATH: {binary}")
+            LOGGER.warning("Vina binary not found in PATH: %s", binary)
 
         if shutil.which(obabel_binary) is None:
-            _warn("obabel", f"binary not found in PATH: {obabel_binary}")
+            LOGGER.warning("Open Babel binary not found in PATH: %s", obabel_binary)
 
         self.binary = binary
         self.obabel_binary = obabel_binary
@@ -421,9 +396,9 @@ class VinaEngine:
         cmd: list[str] = [
             self.binary,
             "--receptor",
-            str(Path(receptor)),
+            str(Path(receptor).resolve()),
             "--ligand",
-            str(Path(ligand)),
+            str(Path(ligand).resolve()),
             "--center_x",
             str(box.center[0]),
             "--center_y",
@@ -437,7 +412,7 @@ class VinaEngine:
             "--size_z",
             str(box.size[2]),
             "--out",
-            str(Path(output)),
+            str(Path(output).resolve()),
         ]
 
         if seed is not None:
@@ -469,7 +444,7 @@ class VinaEngine:
         receptor = Path(receptor).resolve()
 
         if receptor.suffix.lower() == ".pdbqt":
-            _step("vina", f"using receptor PDBQT directly: {receptor.name}")
+            LOGGER.info("Using receptor PDBQT directly: %s", receptor.name)
             return receptor
 
         if receptor.suffix.lower() == ".pdb":
@@ -483,13 +458,11 @@ class VinaEngine:
 
     def dock(self, request: DockingRequest) -> DockingResult:
         """Run docking for all ligands in the request."""
-        _section("DOCKING")
-
         workdir = request.workdir or Path.cwd()
         workdir = Path(workdir).resolve()
         workdir.mkdir(parents=True, exist_ok=True)
 
-        _step("vina", f"workdir: {workdir}")
+        LOGGER.info("Running docking in workdir: %s", workdir)
 
         receptor_for_docking = self._prepare_receptor_for_docking(
             request.receptor,
@@ -517,7 +490,7 @@ class VinaEngine:
                 extra_flags=request.parameters.get("extra_flags"),
             )
 
-            _step("vina", f"docking ligand: {ligand_path.name}")
+            LOGGER.info("Docking ligand: %s", ligand_path.name)
 
             process: CompletedProcess[str] = run(  # noqa: S603
                 cmd,
@@ -545,26 +518,29 @@ class VinaEngine:
 
             if process.returncode == 0 and out_file.exists():
                 if best_score is not None:
-                    _step(
-                        "vina",
-                        f"success: {out_file.name} written; best score {best_score:.3f} kcal/mol; log: {log_file.name}",
+                    LOGGER.info(
+                        "Docking succeeded: %s written; best score %.3f kcal/mol; log: %s",
+                        out_file.name,
+                        best_score,
+                        log_file.name,
                     )
                 else:
-                    _step(
-                        "vina",
-                        f"success: {out_file.name} written; score not parsed; log: {log_file.name}",
+                    LOGGER.info(
+                        "Docking succeeded: %s written; score not parsed; log: %s",
+                        out_file.name,
+                        log_file.name,
                     )
             elif process.returncode == 0 and not out_file.exists():
-                _warn(
-                    "vina",
-                    f"process returned 0 but output missing; log: {log_file.name}",
+                LOGGER.warning(
+                    "Vina returned success but output is missing; log: %s",
+                    log_file.name,
                 )
             else:
-                _error(
-                    "vina",
-                    f"failed: return code {process.returncode}; "
-                    f"stderr summary: {_summarize_stderr(process.stderr)}; "
-                    f"log: {log_file.name}",
+                LOGGER.error(
+                    "Vina failed: return code %s; stderr summary: %s; log: %s",
+                    process.returncode,
+                    _summarize_stderr(process.stderr),
+                    log_file.name,
                 )
 
             poses.append(
