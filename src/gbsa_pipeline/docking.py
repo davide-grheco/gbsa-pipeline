@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from meeko import MoleculePreparation, PDBQTWriterLegacy
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from rdkit import Chem
+from rdkit.Chem import AllChem
 from rdkit.Chem.rdDistGeom import EmbedMolecule
 from rdkit.Chem.rdForceFieldHelpers import UFFOptimizeMolecule
 
@@ -229,6 +230,63 @@ def _detect_mk_export_output_flag(mk_export_binary: str) -> str:
         f"STDOUT:\n{process.stdout}\n"
         f"STDERR:\n{process.stderr}"
     )
+
+
+def _copy_heavy_atom_coordinates_if_possible(
+    target_mol: Chem.Mol,
+    source_mol: Chem.Mol,
+) -> Chem.Mol:
+    """Copy heavy-atom coordinates from source to target when atom counts match."""
+    if source_mol.GetNumConformers() == 0:
+        return target_mol
+
+    if target_mol.GetNumConformers() > 0:
+        return target_mol
+
+    source_no_h = Chem.RemoveHs(Chem.Mol(source_mol))
+    if target_mol.GetNumAtoms() != source_no_h.GetNumAtoms():
+        return target_mol
+
+    source_conf = source_no_h.GetConformer()
+    new_conf = Chem.Conformer(target_mol.GetNumAtoms())
+
+    for atom_idx in range(target_mol.GetNumAtoms()):
+        pos = source_conf.GetAtomPosition(atom_idx)
+        new_conf.SetAtomPosition(atom_idx, pos)
+
+    target_mol.AddConformer(new_conf, assignId=True)
+    return target_mol
+
+
+def assign_bond_orders_from_template_mol(
+    template_mol: Chem.Mol,
+    target_mol: Chem.Mol,
+    *,
+    add_hydrogens: bool = False,
+) -> Chem.Mol:
+    """Rebuild target bond orders from a template while preserving target geometry."""
+    if template_mol is None:
+        raise ValueError("template_mol is None.")
+
+    if target_mol is None:
+        raise ValueError("target_mol is None.")
+
+    template_no_h = Chem.RemoveHs(Chem.Mol(template_mol))
+    target_no_h = Chem.RemoveHs(Chem.Mol(target_mol))
+
+    try:
+        rebuilt = AllChem.AssignBondOrdersFromTemplate(template_no_h, target_no_h)
+    except Exception as exc:
+        raise RuntimeError(
+            "RDKit AssignBondOrdersFromTemplate failed. Template and target molecule likely do not match."
+        ) from exc
+
+    rebuilt = _copy_heavy_atom_coordinates_if_possible(rebuilt, target_mol)
+
+    if add_hydrogens:
+        rebuilt = Chem.AddHs(rebuilt, addCoords=True)
+
+    return rebuilt
 
 
 def export_pdbqt_to_sdf(
