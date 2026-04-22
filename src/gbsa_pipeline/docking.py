@@ -199,7 +199,7 @@ def _build_compact_pose_metadata(
     output_exists: bool,
     receptor_used: Path,
 ) -> dict[str, Any]:
-    """Build compact per-pose metadata stored in the returned result."""
+    """Build minimal per-pose metadata."""
     return {
         "returncode": returncode,
         "log_file": str(Path(log_file).resolve()),
@@ -332,6 +332,13 @@ def prepare_ligand_with_meeko(
 
     elif isinstance(ligand, Chem.Mol):
         mol = Chem.Mol(ligand)
+
+        if mol.GetNumConformers() == 0:
+            raise ValueError(
+                "Chem.Mol input must contain at least one conformer. "
+                "Use a SMILES string input to generate 3D coordinates automatically."
+            )
+
         if name is not None:
             mol.SetProp("_Name", name)
         elif not mol.HasProp("_Name"):
@@ -359,7 +366,7 @@ def prepare_ligand_with_meeko(
 
 
 class VinaEngine:
-    """Minimal AutoDock Vina wrapper with compact console output and log files."""
+    """Minimal AutoDock Vina wrapper."""
 
     name = "vina"
 
@@ -368,7 +375,7 @@ class VinaEngine:
         binary: str = "vina",
         obabel_binary: str = "obabel",
     ) -> None:
-        """Initialize Vina and Open Babel executable names."""
+        """Initialize executable names for Vina and Open Babel."""
         if shutil.which(binary) is None:
             LOGGER.warning("Vina binary not found in PATH: %s", binary)
 
@@ -443,7 +450,6 @@ class VinaEngine:
         receptor = Path(receptor).resolve()
 
         if receptor.suffix.lower() == ".pdbqt":
-            LOGGER.info("Using receptor PDBQT directly: %s", receptor.name)
             return receptor
 
         if receptor.suffix.lower() == ".pdb":
@@ -461,8 +467,6 @@ class VinaEngine:
         workdir = Path(workdir).resolve()
         workdir.mkdir(parents=True, exist_ok=True)
 
-        LOGGER.info("Running docking in workdir: %s", workdir)
-
         receptor_for_docking = self._prepare_receptor_for_docking(
             request.receptor,
             workdir,
@@ -473,7 +477,6 @@ class VinaEngine:
 
         for ligand_entry in request.ligands:
             ligand_path = Path(ligand_entry).resolve()
-
             out_file = workdir / f"{ligand_path.stem}_vina_out.pdbqt"
             log_file = workdir / f"{ligand_path.stem}_vina.log"
 
@@ -488,8 +491,6 @@ class VinaEngine:
                 energy_range=request.parameters.get("energy_range"),
                 extra_flags=request.parameters.get("extra_flags"),
             )
-
-            LOGGER.info("Docking ligand: %s", ligand_path.name)
 
             process: CompletedProcess[str] = run(  # noqa: S603
                 cmd,
@@ -506,54 +507,38 @@ class VinaEngine:
                 title=f"Vina docking log for {ligand_path.name}",
             )
 
-            best_score = _parse_vina_best_score(process.stdout)
-
-            compact_metadata = _build_compact_pose_metadata(
+            pose_metadata = _build_compact_pose_metadata(
                 returncode=process.returncode,
                 log_file=log_file,
                 output_exists=out_file.exists(),
                 receptor_used=receptor_for_docking,
             )
 
-            if process.returncode == 0 and out_file.exists():
-                if best_score is not None:
-                    LOGGER.info(
-                        "Docking succeeded: %s written; best score %.3f kcal/mol; log: %s",
-                        out_file.name,
-                        best_score,
-                        log_file.name,
-                    )
-                else:
-                    LOGGER.info(
-                        "Docking succeeded: %s written; score not parsed; log: %s",
-                        out_file.name,
-                        log_file.name,
-                    )
-            elif process.returncode == 0 and not out_file.exists():
-                LOGGER.warning(
-                    "Vina returned success but output is missing; log: %s",
-                    log_file.name,
-                )
-            else:
-                LOGGER.error(
-                    "Vina failed: return code %s; stderr summary: %s; log: %s",
-                    process.returncode,
-                    _summarize_stderr(process.stderr),
-                    log_file.name,
-                )
-
             poses.append(
                 DockedPose(
                     ligand=ligand_path,
                     pose_path=out_file,
-                    score=best_score,
-                    rank=1 if best_score is not None else None,
+                    score=_parse_vina_best_score(process.stdout),
+                    rank=1,
                     engine=self.name,
-                    metadata=compact_metadata,
+                    metadata=pose_metadata,
                 )
             )
 
-            raw_outputs[str(ligand_path)] = compact_metadata
+            raw_outputs[str(ligand_path)] = pose_metadata
+
+            if process.returncode != 0:
+                LOGGER.error(
+                    "Vina failed for %s: return code %s; stderr summary: %s",
+                    ligand_path.name,
+                    process.returncode,
+                    _summarize_stderr(process.stderr),
+                )
+            elif not out_file.exists():
+                LOGGER.warning(
+                    "Vina returned success but output is missing for %s",
+                    ligand_path.name,
+                )
 
         return DockingResult(
             poses=poses,
