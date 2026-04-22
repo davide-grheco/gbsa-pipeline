@@ -294,8 +294,11 @@ def export_pdbqt_to_sdf(
     output_sdf: Path,
     *,
     mk_export_binary: str = "mk_export.py",
+    template_mol: Chem.Mol | None = None,
+    template_bond_orders: bool = False,
+    add_hydrogens_after_template: bool = True,
 ) -> Path:
-    """Export a PDBQT file to SDF using mk_export.py."""
+    """Export a PDBQT file to SDF, optionally rebuilding bond orders from a template."""
     if shutil.which(mk_export_binary) is None:
         raise RuntimeError(f"Meeko export executable not found in PATH: {mk_export_binary}")
 
@@ -309,14 +312,23 @@ def export_pdbqt_to_sdf(
     if not pdbqt_path.is_file():
         raise ValueError(f"PDBQT path is not a file: {pdbqt_path}")
 
+    if template_bond_orders and template_mol is None:
+        raise ValueError("template_mol is required when template_bond_orders=True.")
+
+    template_for_rebuild = template_mol
+
     output_flag = _detect_mk_export_output_flag(mk_export_binary)
+    raw_output_sdf = output_sdf
+    if template_bond_orders:
+        raw_output_sdf = output_sdf.with_name(f"{output_sdf.stem}_raw{output_sdf.suffix}")
+
     log_path = output_sdf.with_suffix(".mk_export.log")
 
     cmd = [
         mk_export_binary,
         str(pdbqt_path),
         output_flag,
-        str(output_sdf),
+        str(raw_output_sdf),
     ]
 
     process: CompletedProcess[str] = run(  # noqa: S603
@@ -337,15 +349,50 @@ def export_pdbqt_to_sdf(
         raise RuntimeError(
             "mk_export.py failed.\n"
             f"PDBQT: {pdbqt_path}\n"
-            f"Expected SDF: {output_sdf}\n"
+            f"Expected SDF: {raw_output_sdf}\n"
             f"Log: {log_path}\n"
             f"stderr summary: {_summarize_stderr(process.stderr)}"
         )
 
-    if not output_sdf.exists():
+    if not raw_output_sdf.exists():
         raise RuntimeError(
-            f"mk_export.py returned success but expected SDF was not created.\nExpected: {output_sdf}\nLog: {log_path}"
+            "mk_export.py returned success but expected SDF was not created.\n"
+            f"Expected: {raw_output_sdf}\n"
+            f"Log: {log_path}"
         )
+
+    if not template_bond_orders:
+        return raw_output_sdf
+
+    if template_for_rebuild is None:
+        raise RuntimeError("template_mol unexpectedly missing during reconstruction.")
+
+    supplier = Chem.SDMolSupplier(str(raw_output_sdf), removeHs=False)
+    raw_molecules = [mol for mol in supplier if mol is not None]
+
+    if not raw_molecules:
+        raise RuntimeError(f"Could not read any molecules from raw exported SDF: {raw_output_sdf}")
+
+    rebuilt_molecules: list[Chem.Mol] = []
+
+    for raw_mol in raw_molecules:
+        rebuilt = assign_bond_orders_from_template_mol(
+            template_mol=template_for_rebuild,
+            target_mol=raw_mol,
+            add_hydrogens=add_hydrogens_after_template,
+        )
+
+        if raw_mol.HasProp("_Name"):
+            rebuilt.SetProp("_Name", raw_mol.GetProp("_Name"))
+
+        rebuilt_molecules.append(rebuilt)
+
+    writer = Chem.SDWriter(str(output_sdf))
+    try:
+        for rebuilt_mol in rebuilt_molecules:
+            writer.write(rebuilt_mol)
+    finally:
+        writer.close()
 
     return output_sdf
 
