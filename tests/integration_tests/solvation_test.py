@@ -8,11 +8,6 @@ from pathlib import Path
 import BioSimSpace as BSS
 import pytest
 
-# importiere hier deine echten Funktionen / Klassen wie bisher
-# from gbsa_pipeline.solvation_box import run_solvation
-# from gbsa_pipeline.solvation_openmm import ...
-# usw.
-
 
 def _solvation_testdata_dir() -> Path:
     """Return the shared solvation testdata directory."""

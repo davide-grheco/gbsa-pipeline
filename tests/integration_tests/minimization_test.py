@@ -1,5 +1,3 @@
-# tests/minimization_test.py
-
 from pathlib import Path
 
 import BioSimSpace as BSS
