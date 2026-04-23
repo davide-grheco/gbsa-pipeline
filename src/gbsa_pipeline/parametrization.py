@@ -427,17 +427,3 @@ def load_and_parameterise(
             work_dir=Path(work_dir) if work_dir else None,
         )
     )
-
-
-def export_gromacs_top_gro(
-    system: System,
-    prefix: str,
-) -> list[Path]:
-    """Export GROMACS .gro and .top files from a BSS System."""
-    out_gro = Path(f"{prefix}.gro")
-    out_top = Path(f"{prefix}.top")
-
-    BSS.IO.saveMolecules(str(out_gro), system, fileformat="gro87")
-    BSS.IO.saveMolecules(str(out_top), system, fileformat="grotop")
-
-    return [out_gro, out_top]

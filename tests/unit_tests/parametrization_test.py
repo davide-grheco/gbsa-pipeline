@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 import BioSimSpace as BSS
 import pytest
 
+from gbsa_pipeline.bss_io import export_gromacs_top_gro
 from gbsa_pipeline.parametrization import (
-    export_gromacs_top_gro,
     load_protein_pdb,
     parameterise_ligand_gaff2,
     parameterise_protein_amber,

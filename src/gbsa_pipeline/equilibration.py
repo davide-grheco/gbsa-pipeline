@@ -11,9 +11,16 @@ if TYPE_CHECKING:
 
     import sire
 
+    from gbsa_pipeline.config import EquilibrationConfig
 
-def run_heating(simulation_time: BSS.Types.Time, minimized: sire.System, work_dir: Path | None = None) -> sire.System:
-    """Function creates a protocol for NVT Heating and then proceeds with run."""
+
+def run_heating(
+    system: sire.System,
+    config: EquilibrationConfig,
+    work_dir: Path | None = None,
+) -> sire.System:
+    """Run NVT heating from 0 K to 300 K via GROMACS."""
+    simulation_time = config.simulation_time_ps * BSS.Units.Time.picosecond
     heating_protocol = BSS.Protocol.Equilibration(
         runtime=simulation_time,
         temperature_start=0 * BSS.Units.Temperature.kelvin,
@@ -21,10 +28,8 @@ def run_heating(simulation_time: BSS.Types.Time, minimized: sire.System, work_di
         restraint="backbone",
     )
     kwargs = {"work_dir": str(work_dir)} if work_dir else {}
-    heating_process = BSS.Process.Gromacs(protocol=heating_protocol, system=minimized, **kwargs)
+    heating_process = BSS.Process.Gromacs(protocol=heating_protocol, system=system, **kwargs)
 
     heating_process.start()
     heating_process.wait()
-    equilibrated = heating_process.getSystem(block=True)
-
-    return equilibrated
+    return heating_process.getSystem(block=True)

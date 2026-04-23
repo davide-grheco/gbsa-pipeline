@@ -84,8 +84,7 @@ class SolvatedComplex:
 def solvate_openmm(
     parametrized: ParametrisedComplex,
     params: SolvationParams,
-    output_gro: Path,
-    output_top: Path,
+    work_dir: Path,
 ) -> SolvatedComplex:
     """Solvate a parametrised complex with OpenMM + ParmEd (no BSS IO).
 
@@ -103,10 +102,9 @@ def solvate_openmm(
         OpenMM parametrization path).
     params:
         Solvation settings (water model, box shape/size, ion concentration).
-    output_gro:
-        Destination path for the solvated GROMACS coordinate file.
-    output_top:
-        Destination path for the solvated GROMACS topology file.
+    work_dir:
+        Directory where output files (``solvated.gro``, ``solvated.top``)
+        are written.  Created if it does not exist.
 
     Returns:
     -------
@@ -127,7 +125,9 @@ def solvate_openmm(
             "Use parametrize() (not load_amber_complex) before calling this function."
         )
 
-    output_gro.parent.mkdir(parents=True, exist_ok=True)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    output_gro = work_dir / "solvated.gro"
+    output_top = work_dir / "solvated.top"
 
     water_model = (
         WaterModel(str(params.water_model).lower())

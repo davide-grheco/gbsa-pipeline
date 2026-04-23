@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, TypeVar
+from typing import TYPE_CHECKING, Callable, TypeVar
 
-import BioSimSpace as BSS
-
+from gbsa_pipeline.bss_io import export_gromacs_top_gro
 from gbsa_pipeline.change_defaults import run_gro_custom
 from gbsa_pipeline.equilibration import run_heating
 from gbsa_pipeline.minimization import run_minimization
-from gbsa_pipeline.parametrization import export_gromacs_top_gro, parametrize
+from gbsa_pipeline.parametrization import parametrize
 from gbsa_pipeline.solvation_box import SolvationParams
 from gbsa_pipeline.solvation_openmm import SolvatedComplex, solvate_openmm
 
@@ -33,11 +32,6 @@ def _run_stage(name: str, fn: Callable[[], _T]) -> _T:
         raise
     logger.info("  %s completed.", name)
     return result
-
-
-def _save_bss_stage(system: Any, output_path: Path) -> None:
-    """Write a BSS System to ``{output_path}.gro`` and ``{output_path}.top``."""
-    BSS.IO.saveMolecules(str(output_path), system, fileformat=["GRO", "TOP"])
 
 
 def run_pipeline(config: RunConfig, output_dir: Path) -> None:
@@ -92,8 +86,7 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
         lambda: solvate_openmm(
             parametrized=parametrized,
             params=solvation_params,
-            output_gro=sol_dir / "solvated.gro",
-            output_top=sol_dir / "solvated.top",
+            work_dir=sol_dir,
         ),
     )
     logger.info("  Saved → %s / %s", solvated.gro_file.name, solvated.top_file.name)
@@ -113,7 +106,7 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
     min_dir.mkdir(parents=True, exist_ok=True)
     system = _run_stage(
         "minimization",
-        lambda: run_minimization(nsteps=config.minimization.nsteps, system=system, work_dir=min_dir),
+        lambda: run_minimization(system, config=config.minimization, work_dir=min_dir),
     )
     logger.info("  Done. Saving …")
     export_gromacs_top_gro(system, str(min_dir / "minimized"))
@@ -122,10 +115,9 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
     # Stage 4: Equilibrate
     logger.info("─── Stage 4/5: Equilibration ───")
     logger.info("  NVT heating 0→300 K over %.1f ps", config.equilibration.simulation_time_ps)
-    equil_time = config.equilibration.simulation_time_ps * BSS.Units.Time.picosecond
     equil_dir = output_dir / "04_equilibrated"
     equil_dir.mkdir(parents=True, exist_ok=True)
-    system = _run_stage("equilibration", lambda: run_heating(equil_time, system, work_dir=equil_dir))
+    system = _run_stage("equilibration", lambda: run_heating(system, config=config.equilibration, work_dir=equil_dir))
     logger.info("  Done. Saving …")
     export_gromacs_top_gro(system, str(equil_dir / "equilibrated"))
     logger.info("  Saved → 04_equilibrated.gro / .top")

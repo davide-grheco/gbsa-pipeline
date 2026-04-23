@@ -11,25 +11,27 @@ if TYPE_CHECKING:
 
     import sire
 
+    from gbsa_pipeline.config import MinimizationConfig
+
 
 def run_minimization(
-    nsteps: int,
     system: sire.System,
+    config: MinimizationConfig,
     work_dir: Path | None = None,
     **kwargs: Any,
 ) -> BSS.System:
     """Run energy minimization via GROMACS.
 
     Args:
-        nsteps: Maximum number of minimization steps.
         system: Solvated system to minimize.
+        config: Minimization settings (nsteps, emtol).
         work_dir: Optional working directory for GROMACS files.
         **kwargs: Extra keyword arguments forwarded to ``BSS.Process.Gromacs``.
 
     Returns:
         Minimized BioSimSpace system.
     """
-    protocol = BSS.Protocol.Minimisation(steps=nsteps)
+    protocol = BSS.Protocol.Minimisation(steps=config.nsteps)
 
     gromacs_kwargs: dict[str, Any] = dict(kwargs)
     if work_dir is not None:
