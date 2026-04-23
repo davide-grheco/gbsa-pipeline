@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import pickle
 import tempfile
@@ -159,8 +158,8 @@ class ParametrisedComplex:
     gro_file: Path
     top_file: Path
     config: ParametrizationConfig
-    forcefield: Any = field(default=None, hash=False, compare=False, repr=False)
-    parmed_structure: Any = field(default=None, hash=False, compare=False, repr=False)
+    forcefield: ForceField | None = field(default=None, hash=False, compare=False, repr=False)
+    parmed_structure: pmd.Structure | None = field(default=None, hash=False, compare=False, repr=False)
 
 
 # ---------------------------------------------------------------------------
@@ -304,8 +303,10 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
     )
 
     cache_file = work_dir / "complex.pickle"
-    with contextlib.suppress(Exception):
+    try:
         cache_file.write_bytes(pickle.dumps(complex))
+    except Exception:  # noqa: BLE001
+        logger.warning("Failed to write parametrization cache to %s", cache_file, exc_info=True)
 
     return complex
 
