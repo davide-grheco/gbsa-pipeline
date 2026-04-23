@@ -61,7 +61,7 @@ class SolvatedComplex:
 
     gro_file: Path
     top_file: Path
-    parmed_structure: Any = field(default=None, hash=False, compare=False, repr=False)
+    parmed_structure: pmd.Structure | None = field(default=None, hash=False, compare=False, repr=False)
 
     def load_bss(self) -> Any:
         """Load this complex as a BioSimSpace System for MD stages.
@@ -140,7 +140,7 @@ def solvate_openmm(
     # 1. Reuse the in-memory ParmEd structure from parametrization
     #    (all protein+ligand force field parameters already assigned)
     # ------------------------------------------------------------------
-    existing: Any = parametrized.parmed_structure
+    existing: pmd.Structure = parametrized.parmed_structure
     n_orig = len(existing.atoms)
     logger.debug("Using in-memory ParmEd structure (%d atoms).", n_orig)
 
