@@ -1,4 +1,10 @@
-"""Integration tests for the lightweight docking adapter layer."""
+"""Integration tests for the lightweight docking adapter layer.
+
+This module keeps only integration-level checks.
+Unit-style checks such as command construction and simple Meeko output
+generation should live in tests/unit_tests/, not here.
+The goal here is to verify external-tool workflows end to end.
+"""
 
 from __future__ import annotations
 
@@ -30,6 +36,15 @@ DOCKPROTEIN_BOX = DockingBox(
 
 
 def _read_first_sdf_molecule(path: Path) -> Chem.Mol:
+    """Read the first molecule from an SDF file.
+
+    This helper exists so every integration test uses the same SDF-loading
+    behavior and fails in the same way when the fixture is broken.
+    The `path` parameter is required because these tests use several derived
+    SDF files written during roundtrip and reconstruction steps.
+    We are currently checking that the requested SDF exists structurally as a
+    usable RDKit molecule, not just as a text file on disk.
+    """
     supplier = Chem.SDMolSupplier(str(path), removeHs=False)
     molecule = supplier[0]
 
@@ -40,6 +55,15 @@ def _read_first_sdf_molecule(path: Path) -> Chem.Mol:
 
 
 def _centroid(molecule: Chem.Mol) -> tuple[float, float, float]:
+    """Compute the geometric centroid of all atoms in one conformer.
+
+    This helper is used as a coarse pose-preservation check when we compare a
+    raw exported ligand to its reconstructed version.
+    The `molecule` parameter is required because we want to evaluate the
+    coordinates of whichever intermediate object the test is currently studying.
+    We are currently checking that reconstruction does not shift the whole
+    ligand to a different part of space even if bonding is rewritten.
+    """
     if molecule.GetNumConformers() == 0:
         raise ValueError("Molecule has no conformer.")
 
@@ -67,24 +91,73 @@ def _distance(
     left: tuple[float, float, float],
     right: tuple[float, float, float],
 ) -> float:
+    """Return Euclidean distance between two 3D points.
+
+    This helper exists so centroid-shift checks stay readable inside the tests.
+    The `left` and `right` parameters are needed because the tests compare
+    centroids from raw and rebuilt molecules, or other pose-like summaries.
+    We are currently checking whether two objects occupy almost the same region
+    of space after export and chemistry reconstruction.
+    """
     return math.sqrt((left[0] - right[0]) ** 2 + (left[1] - right[1]) ** 2 + (left[2] - right[2]) ** 2)
 
 
 def _heavy_molecule(molecule: Chem.Mol) -> Chem.Mol:
+    """Return a copy of a molecule with hydrogens removed.
+
+    We use heavy-atom-only comparisons because RDKit's own documentation warns
+    that hydrogen-rich symmetry matching can lead to combinatorial explosion in
+    RMS calculations, which is exactly the wrong failure mode for pose tests.
+    The `molecule` parameter is required because every test stage may generate
+    a different molecule object that still needs a fair, comparable metric.
+    We are currently checking pose preservation and chemistry on the stable
+    heavy-atom scaffold rather than on hydrogen placement details.
+
+    Reference:
+    https://www.rdkit.org/docs/source/rdkit.Chem.rdMolAlign.html
+    """
     return Chem.RemoveHs(Chem.Mol(molecule))
 
 
 def _bond_order_sum(molecule: Chem.Mol) -> float:
+    """Return the sum of bond orders over the heavy-atom graph.
+
+    This is a deliberately simple chemistry summary used to compare whether a
+    reconstructed ligand moved closer to the template chemistry than the raw
+    export did.
+    The `molecule` parameter is needed because we compare raw export, rebuilt
+    export, and template against the same scalar metric.
+    We are currently checking coarse bond-order restoration, not a full graph
+    isomorphism proof of chemical correctness.
+    """
     heavy = _heavy_molecule(molecule)
     return sum(bond.GetBondTypeAsDouble() for bond in heavy.GetBonds())
 
 
 def _aromatic_bond_count(molecule: Chem.Mol) -> int:
+    """Count aromatic bonds on the heavy-atom graph.
+
+    This helper complements `_bond_order_sum()` because aromatic perception is
+    one of the places where raw export and reconstructed chemistry may differ.
+    The `molecule` parameter is required because we compare template, raw, and
+    rebuilt forms under the same aromaticity summary.
+    We are currently checking whether reconstruction restores at least this
+    basic aromatic feature set without disturbing the coordinates.
+    """
     heavy = _heavy_molecule(molecule)
     return sum(1 for bond in heavy.GetBonds() if bond.GetIsAromatic())
 
 
 def test_meeko_smiles_to_pdbqt(tmp_path: Path) -> None:
+    """Check that SMILES input can be prepared to a basic PDBQT file.
+
+    This is still useful as an integration-level sanity check because Meeko and
+    RDKit behavior can differ across environments even for trivial examples.
+    The `tmp_path` parameter is required because the prepared PDBQT file is only
+    a runtime artifact used to confirm that the preparation pipeline runs.
+    We are currently checking that the output file exists and contains the
+    expected PDBQT-style sections needed by later docking stages.
+    """
     output = tmp_path / "ligand.pdbqt"
 
     path = prepare_ligand_with_meeko("CCO", output, name="ETH")
@@ -98,6 +171,16 @@ def test_meeko_smiles_to_pdbqt(tmp_path: Path) -> None:
 
 
 def test_vina_build_command(tmp_path: Path) -> None:
+    """Check that the Vina adapter builds a command with the expected flags.
+
+    This test keeps the command-construction contract explicit because small
+    changes in argument ordering or omission can silently break integration
+    runs even before Vina itself is called.
+    The `tmp_path` parameter is required because we create disposable receptor,
+    ligand, and output paths only to inspect the constructed command.
+    We are currently checking that seed, CPU, mode count, exhaustiveness, and
+    energy range are forwarded into the final Vina command line.
+    """
     engine = VinaEngine(binary="vina")
 
     receptor = tmp_path / "receptor.pdbqt"
@@ -134,6 +217,21 @@ def test_vina_build_command(tmp_path: Path) -> None:
 
 @pytest.mark.integration
 def test_pdbqt_to_sdf_roundtrip_preserves_pose(tmp_path: Path) -> None:
+    """Check that raw PDBQT-to-SDF export preserves the ligand pose reasonably.
+
+    This test isolates export behavior without docking so that failures can be
+    attributed to Meeko preparation or mk_export-based roundtrip handling
+    rather than to Vina sampling.
+    The `tmp_path` parameter is required because all generated artifacts should
+    remain local to the test run and not pollute versioned fixture directories.
+    We are currently checking that a ligand prepared to PDBQT and exported back
+    to SDF stays close in heavy-atom geometry to the original template ligand.
+
+    Reference:
+    RDKit documents `CalcRMS()` as an in-place RMS measure that is useful for
+    docking-pose comparisons and does not pre-align the probe molecule:
+    https://www.rdkit.org/docs/source/rdkit.Chem.rdMolAlign.html
+    """
     if shutil.which("mk_export.py") is None:
         pytest.skip("mk_export.py not available in PATH")
 
@@ -169,6 +267,21 @@ def test_pdbqt_to_sdf_roundtrip_preserves_pose(tmp_path: Path) -> None:
 def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_drift(
     tmp_path: Path,
 ) -> None:
+    """Check isolated chemistry reconstruction on a non-docked roundtrip ligand.
+
+    This test is intentionally narrower than the end-to-end docking test and
+    exists so chemistry-rebuild failures can be debugged without involving Vina.
+    The `tmp_path` parameter is required because the raw and rebuilt SDF files
+    are intermediate artifacts, not durable fixtures.
+    We are currently checking two things at once: the rebuilt molecule should
+    remain where the raw exported molecule is, and its chemistry should match
+    the original template at least as well as the raw export does.
+
+    Reference:
+    RDKit `AssignBondOrdersFromTemplate()` is the core mechanism used for
+    restoring bond orders from a trusted template molecule:
+    https://www.rdkit.org/docs/source/rdkit.Chem.AllChem.html
+    """
     if shutil.which("mk_export.py") is None:
         pytest.skip("mk_export.py not available in PATH")
 
@@ -236,6 +349,20 @@ def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_dr
 
 @pytest.mark.integration
 def test_vina_binary_smoke(tmp_path: Path) -> None:
+    """Check that the external Vina workflow runs and returns one pose.
+
+    This is intentionally just a smoke test and should not be interpreted as a
+    scientific validation of the docking setup or box choice.
+    The `tmp_path` parameter is required because the prepared ligand PDBQT and
+    Vina output files are runtime artifacts that should not be committed.
+    We are currently checking only that the adapter can prepare input, call
+    Vina, and produce one readable pose file with a parsed score.
+
+    Reference:
+    The Vina basic workflow requires a receptor, ligand, box center, and box
+    size for a standard docking run:
+    https://autodock-vina.readthedocs.io/en/latest/docking_basic.html
+    """
     if shutil.which("vina") is None:
         pytest.skip("vina not available in PATH")
 
@@ -267,10 +394,54 @@ def test_vina_binary_smoke(tmp_path: Path) -> None:
     assert result.poses[0].score is not None
 
 
+# ┌─────────────────────────────────────────────────────────────────────────────┐
+# │ TEMPORARY PULL-REQUEST DEBUG NOTE                                          │
+# ├─────────────────────────────────────────────────────────────────────────────┤
+# │ This end-to-end test intentionally documents every workflow input and       │
+# │ output so the full docking and reconstruction path can be shown during      │
+# │ pull-request review. The long-term version should keep all generated        │
+# │ artifacts in tmp_path only, but for review discussion it is useful to       │
+# │ state explicitly what goes in and what comes out at each stage.             │
+# │                                                                             │
+# │ Static inputs from tests/testdata/docking/                                  │
+# │   - dockprotein.pdb                                                         │
+# │   - dockligand.sdf                                                          │
+# │                                                                             │
+# │ Runtime outputs produced inside tmp_path during this test                   │
+# │   - dockligand_for_docking.pdbqt                                            │
+# │   - dockligand_for_docking_vina_out.pdbqt                                   │
+# │   - dockligand_for_docking_vina_out_raw.sdf                                 │
+# │   - dockligand_for_docking_vina_out_rebuilt.sdf                             │
+# │                                                                             │
+# │ Scientific intent                                                           │
+# │   - template ligand SDF provides the chemistry                              │
+# │   - docked Vina pose PDBQT provides the coordinates                         │
+# │   - rebuilt final SDF must keep the docked position while recovering        │
+# │     chemistry from the original ligand template                             │
+# │                                                                             │
+# │ This comment block is temporary and exists so the pull request can show     │
+# │ Davide exactly what this module is doing end to end.                        │
+# └─────────────────────────────────────────────────────────────────────────────┘
 @pytest.mark.integration
 def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position(
     tmp_path: Path,
 ) -> None:
+    """Run the full ligand-prep, docking, export, and reconstruction workflow.
+
+    This is the real end-to-end test for the current docking segment and it is
+    the one that matters most scientifically for your reconstruction logic.
+    The `tmp_path` parameter is required because we need several intermediate
+    files: prepared ligand PDBQT, docked pose PDBQT, raw exported SDF, and
+    rebuilt exported SDF.
+    We are currently checking the core rule of the pipeline: the final rebuilt
+    ligand must inherit chemistry from the original template while inheriting
+    coordinates from the docked pose, not from the pre-docking template.
+
+    Reference:
+    RDKit `CalcRMS()` is used here specifically because its documentation notes
+    that it computes RMS in place and is useful for docking-pose comparisons:
+    https://www.rdkit.org/docs/source/rdkit.Chem.rdMolAlign.html
+    """
     if shutil.which("vina") is None:
         pytest.skip("vina not available in PATH")
 
