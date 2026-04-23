@@ -20,7 +20,7 @@ from pathlib import Path
 from subprocess import CompletedProcess, run
 from typing import TYPE_CHECKING, Any, Protocol
 
-from meeko import MoleculePreparation, PDBQTWriterLegacy
+from meeko import MoleculePreparation, PDBQTMolecule, PDBQTWriterLegacy, RDKitMolCreate
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -422,37 +422,6 @@ def _build_compact_pose_metadata(
     }
 
 
-def _detect_mk_export_output_flag(mk_export_binary: str) -> str:
-    """Detect the output flag supported by mk_export.py.
-
-    This helper exists because installed `mk_export.py` versions may differ in
-    whether they expect `-s`, `-o`, or another syntax for SDF output.
-    The `mk_export_binary` parameter is required because callers may provide a
-    non-default executable name or wrapper script.
-    We are currently checking only the help text for the output flags actually
-    observed in practice, because this is a compatibility shim rather than a full CLI parser.
-    """
-    process: CompletedProcess[str] = run(  # noqa: S603
-        [mk_export_binary, "-h"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    help_text = (process.stdout or "") + "\n" + (process.stderr or "")
-
-    if "--write_sdf" in help_text:
-        return "-s"
-
-    if re.search(r"(^|\s)-o(\s|,|$)", help_text):
-        return "-o"
-
-    raise RuntimeError(
-        "Could not determine mk_export.py output flag from help text.\n"
-        f"STDOUT:\n{process.stdout}\n"
-        f"STDERR:\n{process.stderr}"
-    )
-
-
 def _copy_heavy_atom_coordinates_if_possible(
     target_mol: Chem.Mol,
     source_mol: Chem.Mol,
@@ -536,7 +505,6 @@ def export_pdbqt_to_sdf(
     pdbqt_path: Path,
     output_sdf: Path,
     *,
-    mk_export_binary: str = "mk_export.py",
     template_mol: Chem.Mol | None = None,
     template_bond_orders: bool = False,
     add_hydrogens_after_template: bool = True,
@@ -548,16 +516,10 @@ def export_pdbqt_to_sdf(
     The parameters split those concerns explicitly: `pdbqt_path` and `output_sdf`
     define the file conversion, while `template_mol`, `template_bond_orders`,
     and `add_hydrogens_after_template` control whether and how chemistry is rebuilt.
-    We are currently checking that raw export succeeds first, then only if
-    reconstruction was requested do we rebuild chemistry while preserving the
-    exported coordinates as much as possible.
-
-    Reference:
-    https://meeko.readthedocs.io/
+    We are currently using Meeko's Python API directly instead of shelling out
+    to `mk_export.py`, because library-level conversion is the simpler and more
+    stable integration point for this module.
     """
-    if shutil.which(mk_export_binary) is None:
-        raise RuntimeError(f"Meeko export executable not found in PATH: {mk_export_binary}")
-
     pdbqt_path = Path(pdbqt_path).resolve()
     output_sdf = Path(output_sdf).resolve()
     output_sdf.parent.mkdir(parents=True, exist_ok=True)
@@ -571,84 +533,42 @@ def export_pdbqt_to_sdf(
     if template_bond_orders and template_mol is None:
         raise ValueError("template_mol is required when template_bond_orders=True.")
 
-    template_for_rebuild = template_mol
+    pdbqt_molecule = PDBQTMolecule.from_file(str(pdbqt_path), skip_typing=True)
+    raw_molecules = RDKitMolCreate.from_pdbqt_mol(pdbqt_molecule)
+    valid_raw_molecules = [mol for mol in raw_molecules if mol is not None]
 
-    output_flag = _detect_mk_export_output_flag(mk_export_binary)
-    raw_output_sdf = output_sdf
-    if template_bond_orders:
-        raw_output_sdf = output_sdf.with_name(f"{output_sdf.stem}_raw{output_sdf.suffix}")
+    if not valid_raw_molecules:
+        raise RuntimeError(f"Meeko could not reconstruct any molecules from docking output.\nPDBQT: {pdbqt_path}")
 
-    log_path = output_sdf.with_suffix(".mk_export.log")
+    output_molecules: list[Chem.Mol] = []
 
-    cmd = [
-        mk_export_binary,
-        str(pdbqt_path),
-        output_flag,
-        str(raw_output_sdf),
-    ]
+    for raw_mol in valid_raw_molecules:
+        output_mol = raw_mol
 
-    process: CompletedProcess[str] = run(  # noqa: S603
-        cmd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+        if template_bond_orders:
+            if template_mol is None:
+                raise RuntimeError("template_mol unexpectedly missing during reconstruction.")
 
-    _write_process_log(
-        log_path,
-        process,
-        command=cmd,
-        title=f"mk_export.py export log for {pdbqt_path.name}",
-    )
+            output_mol = assign_bond_orders_from_template_mol(
+                template_mol=template_mol,
+                target_mol=raw_mol,
+                add_hydrogens=add_hydrogens_after_template,
+            )
 
-    if process.returncode != 0:
-        raise RuntimeError(
-            "mk_export.py failed.\n"
-            f"PDBQT: {pdbqt_path}\n"
-            f"Expected SDF: {raw_output_sdf}\n"
-            f"Log: {log_path}\n"
-            f"stderr summary: {_summarize_stderr(process.stderr)}"
-        )
+            if raw_mol.HasProp("_Name"):
+                output_mol.SetProp("_Name", raw_mol.GetProp("_Name"))
 
-    if not raw_output_sdf.exists():
-        raise RuntimeError(
-            "mk_export.py returned success but expected SDF was not created.\n"
-            f"Expected: {raw_output_sdf}\n"
-            f"Log: {log_path}"
-        )
-
-    if not template_bond_orders:
-        return raw_output_sdf
-
-    if template_for_rebuild is None:
-        raise RuntimeError("template_mol unexpectedly missing during reconstruction.")
-
-    supplier = Chem.SDMolSupplier(str(raw_output_sdf), removeHs=False)
-    raw_molecules = [mol for mol in supplier if mol is not None]
-
-    if not raw_molecules:
-        raise RuntimeError(f"Could not read any molecules from raw exported SDF: {raw_output_sdf}")
-
-    rebuilt_molecules: list[Chem.Mol] = []
-
-    for raw_mol in raw_molecules:
-        rebuilt = assign_bond_orders_from_template_mol(
-            template_mol=template_for_rebuild,
-            target_mol=raw_mol,
-            add_hydrogens=add_hydrogens_after_template,
-        )
-
-        if raw_mol.HasProp("_Name"):
-            rebuilt.SetProp("_Name", raw_mol.GetProp("_Name"))
-
-        rebuilt_molecules.append(rebuilt)
+        output_molecules.append(output_mol)
 
     writer = Chem.SDWriter(str(output_sdf))
     try:
-        for rebuilt_mol in rebuilt_molecules:
-            writer.write(rebuilt_mol)
+        for output_mol in output_molecules:
+            writer.write(output_mol)
     finally:
         writer.close()
+
+    if not output_sdf.exists():
+        raise RuntimeError(f"Meeko reported success but expected SDF output is missing.\nExpected: {output_sdf}")
 
     return output_sdf
 
