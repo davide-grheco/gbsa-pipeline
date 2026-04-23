@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from meeko import MoleculePreparation, PDBQTMolecule, PDBQTWriterLegacy, RDKitMolCreate
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from rdkit import Chem
-from rdkit.Chem import AllChem
+from rdkit.Chem import AllChem, rdmolops
 from rdkit.Chem.rdDistGeom import EmbedMolecule
 from rdkit.Chem.rdForceFieldHelpers import UFFOptimizeMolecule
 
@@ -431,57 +431,24 @@ def _build_compact_pose_metadata(
     }
 
 
-def _copy_heavy_atom_coordinates_if_possible(
-    target_mol: Chem.Mol,
-    source_mol: Chem.Mol,
-) -> Chem.Mol:
-    """Copy heavy-atom coordinates from source to target when atom counts match.
-
-    This helper is part of the pose-preservation rule: when chemistry is rebuilt
-    from a template, coordinates should still come from the docked or exported pose.
-    The `target_mol` and `source_mol` parameters are both needed because the
-    target carries the desired bonding pattern while the source carries the desired geometry.
-    We are currently checking only the simple, conservative case where heavy-atom
-    counts match exactly and the rebuilt target still has no conformer of its own.
-    """
-    if source_mol.GetNumConformers() == 0:
-        return target_mol
-
-    if target_mol.GetNumConformers() > 0:
-        return target_mol
-
-    source_no_h = Chem.RemoveHs(Chem.Mol(source_mol))
-    if target_mol.GetNumAtoms() != source_no_h.GetNumAtoms():
-        return target_mol
-
-    source_conf = source_no_h.GetConformer()
-    new_conf = Chem.Conformer(target_mol.GetNumAtoms())
-
-    for atom_idx in range(target_mol.GetNumAtoms()):
-        pos = source_conf.GetAtomPosition(atom_idx)
-        new_conf.SetAtomPosition(atom_idx, pos)
-
-    target_mol.AddConformer(new_conf, assignId=True)
-    return target_mol
-
-
 def assign_bond_orders_from_template_mol(
     template_mol: Chem.Mol,
     target_mol: Chem.Mol,
     *,
     add_hydrogens: bool = False,
 ) -> Chem.Mol:
-    """Rebuild target bond orders from a template while preserving target geometry.
+    """Repair target bond orders from a template while preserving target geometry.
 
     This is the central chemistry-restoration function in the module, and it is
     intentionally separate from raw export so chemistry and coordinates can be
     reasoned about independently.
     The `template_mol` parameter is required because it is the trusted source of
-    bond orders, while `target_mol` is required because it carries the pose that
-    must be preserved after reconstruction.
-    We are currently using RDKit's `AssignBondOrdersFromTemplate()` for the
-    chemistry step and then reapplying coordinates from the target molecule so
-    the rebuilt ligand does not drift away from the docked position.
+    bond orders, while `target_mol` is required because it carries the docked
+    pose geometry that should remain attached to the repaired molecule.
+    We are currently relying on RDKit's `AssignBondOrdersFromTemplate()` to
+    repair bond orders directly on the docked heavy-atom graph, then inferring
+    stereochemistry from the existing 3D coordinates and optionally re-adding
+    hydrogens afterward.
 
     Reference:
     https://www.rdkit.org/docs/source/rdkit.Chem.AllChem.html
@@ -502,7 +469,7 @@ def assign_bond_orders_from_template_mol(
             "RDKit AssignBondOrdersFromTemplate failed. Template and target molecule likely do not match."
         ) from exc
 
-    rebuilt = _copy_heavy_atom_coordinates_if_possible(rebuilt, target_mol)
+    rdmolops.AssignStereochemistryFrom3D(rebuilt)
 
     if add_hydrogens:
         rebuilt = Chem.AddHs(rebuilt, addCoords=True)
