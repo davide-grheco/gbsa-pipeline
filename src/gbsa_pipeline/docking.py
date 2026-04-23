@@ -377,24 +377,33 @@ def _extract_pdbqt_string_from_meeko_result(result: Any) -> str:
     raise TypeError(f"Unexpected return type from Meeko write_string(): {type(result).__name__}")
 
 
-def _parse_vina_best_score(stdout: str) -> float | None:
-    """Parse the best affinity from the first row of Vina's result table.
+def _parse_vina_best_score_from_log(log_path: Path) -> float | None:
+    """Parse the best affinity from the written Vina log file.
 
-    This helper exists so the engine can return a compact score without having
-    to store or parse the entire Vina output format structurally.
-    The `stdout` parameter is required because Vina prints the score table to
-    standard output rather than to a separate machine-readable file.
+    This helper exists because docking output is already persisted to disk and
+    downstream parsing should use that durable record rather than in-memory
+    subprocess stdout.
+    The `log_path` parameter is required because the score now comes from the
+    archived process log written by `_write_process_log()`.
     We are currently checking only the first-ranked pose because the current
-    adapter uses a minimal top-pose view rather than a full ranked-pose parser.
+    adapter exposes a minimal top-pose view instead of a full ranked table.
 
     Reference:
     https://autodock-vina.readthedocs.io/en/latest/
     """
-    for line in stdout.splitlines():
+    resolved_log_path = Path(log_path).resolve()
+
+    if not resolved_log_path.exists():
+        return None
+
+    log_text = resolved_log_path.read_text(encoding="utf-8")
+
+    for line in log_text.splitlines():
         stripped = line.strip()
         match = re.match(r"^1\s+(-?\d+(?:\.\d+)?)\s+", stripped)
         if match:
             return float(match.group(1))
+
     return None
 
 
@@ -894,8 +903,8 @@ class VinaEngine:
         docking contract: receptor, ligands, box, working directory, and runtime
         options in one validated object.
         We are currently checking a minimal but useful workflow: prepare the
-        receptor if needed, run Vina ligand by ligand, parse the top score if
-        possible, write full logs, and return structured pose records.
+        receptor if needed, run Vina ligand by ligand, parse the top score from
+        the persisted log file, write full logs, and return structured pose records.
         """
         workdir = request.workdir or Path.cwd()
         workdir = Path(workdir).resolve()
@@ -941,7 +950,7 @@ class VinaEngine:
                 title=f"Vina docking log for {ligand_path.name}",
             )
 
-            score = _parse_vina_best_score(process.stdout)
+            score = _parse_vina_best_score_from_log(log_file)
             rank = 1 if score is not None else None
 
             pose_metadata = _build_compact_pose_metadata(
