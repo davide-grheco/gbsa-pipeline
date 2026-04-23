@@ -143,8 +143,8 @@ def test_pdbqt_to_sdf_roundtrip_preserves_pose(tmp_path: Path) -> None:
     """Check that raw PDBQT-to-SDF export preserves the ligand pose reasonably.
 
     This test isolates export behavior without docking so that failures can be
-    attributed to Meeko preparation or mk_export-based roundtrip handling
-    rather than to Vina sampling.
+    attributed to Meeko preparation or Meeko-library roundtrip handling rather
+    than to Vina sampling.
     The outputs are written into `tmp_path` so the integration test remains
     self-contained and does not modify repository fixtures.
     We are currently checking that a ligand prepared to PDBQT and exported back
@@ -155,9 +155,6 @@ def test_pdbqt_to_sdf_roundtrip_preserves_pose(tmp_path: Path) -> None:
     docking-pose comparisons and does not pre-align the probe molecule:
     https://www.rdkit.org/docs/source/rdkit.Chem.rdMolAlign.html
     """
-    if shutil.which("mk_export.py") is None:
-        pytest.skip("mk_export.py not available in PATH")
-
     if not DOCKLIGAND_SDF.exists():
         pytest.skip(f"missing ligand test file: {DOCKLIGAND_SDF}")
 
@@ -205,9 +202,6 @@ def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_dr
     restoring bond orders from a trusted template molecule:
     https://www.rdkit.org/docs/source/rdkit.Chem.AllChem.html
     """
-    if shutil.which("mk_export.py") is None:
-        pytest.skip("mk_export.py not available in PATH")
-
     if not DOCKLIGAND_SDF.exists():
         pytest.skip(f"missing ligand test file: {DOCKLIGAND_SDF}")
 
@@ -222,13 +216,11 @@ def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_dr
     raw_export_path = export_pdbqt_to_sdf(
         roundtrip_pdbqt,
         roundtrip_raw_sdf,
-        template_bond_orders=False,
     )
     rebuilt_export_path = export_pdbqt_to_sdf(
         roundtrip_pdbqt,
         roundtrip_rebuilt_sdf,
         template_mol=template_molecule,
-        template_bond_orders=True,
         add_hydrogens_after_template=True,
     )
 
@@ -299,7 +291,6 @@ def test_vina_binary_smoke(tmp_path: Path) -> None:
     docking_output_pdbqt = tmp_path / "dockligand_for_docking_vina_out.pdbqt"
 
     engine = VinaEngine(binary="vina")
-    docking_input_pdbqt = tmp_path / "dockligand_for_docking.pdbqt"
 
     prepare_ligand_with_meeko(
         load_first_sdf_molecule(DOCKLIGAND_SDF),
@@ -346,9 +337,6 @@ def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position
     if shutil.which("vina") is None:
         pytest.skip("vina not available in PATH")
 
-    if shutil.which("mk_export.py") is None:
-        pytest.skip("mk_export.py not available in PATH")
-
     if not DOCKPROTEIN_PDB.exists():
         pytest.skip(f"missing receptor test file: {DOCKPROTEIN_PDB}")
 
@@ -387,13 +375,11 @@ def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position
     raw_docked_sdf = export_pdbqt_to_sdf(
         docking_output_pdbqt,
         docking_output_raw_sdf,
-        template_bond_orders=False,
     )
     rebuilt_docked_sdf = export_pdbqt_to_sdf(
         docking_output_pdbqt,
         docking_output_rebuilt_sdf,
         template_mol=template_molecule,
-        template_bond_orders=True,
         add_hydrogens_after_template=True,
     )
 

@@ -369,7 +369,7 @@ def _extract_pdbqt_string_from_meeko_result(result: Any) -> str:
 
         if not isinstance(pdbqt_string, str):
             raise TypeError(
-                f"Expected first element of Meeko write_string() result to be a str, got {type(pdbqt_string).__name__}."
+                f"Expected first element of Meeko write_string() result to be a str, got {type(result[0]).__name__}."
             )
 
         return pdbqt_string
@@ -482,19 +482,18 @@ def export_pdbqt_to_sdf(
     output_sdf: Path,
     *,
     template_mol: Chem.Mol | None = None,
-    template_bond_orders: bool = False,
     add_hydrogens_after_template: bool = True,
 ) -> Path:
     """Export a PDBQT file to SDF, optionally rebuilding bond orders from a template.
 
     This function combines two related but distinct steps: raw PDBQT-to-SDF
     export and optional chemistry reconstruction from a trusted template.
-    The parameters split those concerns explicitly: `pdbqt_path` and `output_sdf`
-    define the file conversion, while `template_mol`, `template_bond_orders`,
-    and `add_hydrogens_after_template` control whether and how chemistry is rebuilt.
-    We are currently using Meeko's Python API directly instead of shelling out
-    to `mk_export.py`, because library-level conversion is the simpler and more
-    stable integration point for this module.
+    The `pdbqt_path` and `output_sdf` parameters define the file conversion,
+    while `template_mol` determines whether bond-order repair should be applied
+    and `add_hydrogens_after_template` controls hydrogen re-addition afterward.
+    We are currently using the presence of `template_mol` as the single switch
+    for template-based repair, because a separate boolean flag would add a
+    redundant and potentially contradictory state to this API.
     """
     pdbqt_path = Path(pdbqt_path).resolve()
     output_sdf = Path(output_sdf).resolve()
@@ -505,9 +504,6 @@ def export_pdbqt_to_sdf(
 
     if not pdbqt_path.is_file():
         raise ValueError(f"PDBQT path is not a file: {pdbqt_path}")
-
-    if template_bond_orders and template_mol is None:
-        raise ValueError("template_mol is required when template_bond_orders=True.")
 
     pdbqt_molecule = PDBQTMolecule.from_file(str(pdbqt_path), skip_typing=True)
     raw_molecules = RDKitMolCreate.from_pdbqt_mol(pdbqt_molecule)
@@ -521,10 +517,7 @@ def export_pdbqt_to_sdf(
     for raw_mol in valid_raw_molecules:
         output_mol = raw_mol
 
-        if template_bond_orders:
-            if template_mol is None:
-                raise RuntimeError("template_mol unexpectedly missing during reconstruction.")
-
+        if template_mol is not None:
             output_mol = assign_bond_orders_from_template_mol(
                 template_mol=template_mol,
                 target_mol=raw_mol,
