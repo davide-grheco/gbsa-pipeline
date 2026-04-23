@@ -272,13 +272,10 @@ def point_distance(
 
     This helper exists so coarse pose-shift checks can stay readable and avoid
     repeating the same distance expression at multiple call sites.
-    The `left` and `right` parameters are required because the typical use here
-    is to compare centroids or other compact 3D summaries derived from molecules.
-    We are currently computing only the standard Euclidean distance in Cartesian
-    space, because that is the intended quick QC metric for roundtrip and
-    reconstruction tests in this docking workflow.
+    We rely on Python's standard library implementation instead of a local
+    formula to keep the code concise and avoid unnecessary dependencies.
     """
-    return math.sqrt((left[0] - right[0]) ** 2 + (left[1] - right[1]) ** 2 + (left[2] - right[2]) ** 2)
+    return math.dist(left, right)
 
 
 def _summarize_stderr(stderr: str, max_lines: int = 4) -> str:
