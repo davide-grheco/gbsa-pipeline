@@ -12,6 +12,7 @@ ligand redocking or box-derivation logic that belongs to a different workflow.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import shutil
 from dataclasses import dataclass, field
@@ -179,7 +180,115 @@ class DockingEngine(Protocol):
     name: str
 
     def dock(self, request: DockingRequest) -> DockingResult:
-        """Run docking for the provided request."""
+        """Run docking for one validated docking request.
+
+        This method defines the minimal operation a docking backend must expose
+        so the rest of the code can treat concrete engines uniformly.
+        The `request` parameter is required because it bundles receptor, ligands,
+        box, work directory, and runtime parameters into one validated object.
+        We are currently requiring only a structured `DockingResult` return value,
+        because downstream workflow code should not need to parse backend-specific
+        subprocess results directly.
+        """
+
+
+def load_first_sdf_molecule(path: Path, *, remove_hs: bool = False) -> Chem.Mol:
+    """Read the first valid molecule from an SDF file.
+
+    This helper exists so SDF loading behavior is centralized and consistent
+    instead of being rewritten at multiple call sites with slightly different
+    failure behavior.
+    The `path` parameter is required because this function is specifically about
+    reading one file from disk, while `remove_hs` controls whether RDKit should
+    strip hydrogens during import.
+    We are currently checking only that the file exists, is a file, and yields
+    a non-None first molecule, because this module expects single-ligand SDF
+    inputs rather than arbitrary multi-record chemistry archives.
+    """
+    path = Path(path).resolve()
+
+    if not path.exists():
+        raise FileNotFoundError(f"SDF file not found: {path}")
+
+    if not path.is_file():
+        raise ValueError(f"SDF path is not a file: {path}")
+
+    supplier = Chem.SDMolSupplier(str(path), removeHs=remove_hs)
+    molecule = supplier[0]
+
+    if molecule is None:
+        raise ValueError(f"Could not read first molecule from SDF: {path}")
+
+    return molecule
+
+
+def remove_hydrogens_copy(molecule: Chem.Mol) -> Chem.Mol:
+    """Return a copy of a molecule with hydrogens removed.
+
+    This helper exists because pose and chemistry comparisons are often more
+    stable on the heavy-atom graph than on a hydrogen-complete representation.
+    The `molecule` parameter is required because callers may want to normalize
+    molecules coming from templates, raw exports, or rebuilt structures in the
+    same way before comparison.
+    We are currently using RDKit's hydrogen removal on a copied molecule so the
+    original input object stays unchanged, which is important when the same
+    molecule is reused later for export or debugging.
+    """
+    return Chem.RemoveHs(Chem.Mol(molecule))
+
+
+def molecule_centroid(molecule: Chem.Mol) -> tuple[float, float, float]:
+    """Compute the geometric centroid of all atoms in one conformer.
+
+    This helper exists because pose-comparison code often needs a very cheap
+    spatial summary of a molecule without performing alignment.
+    The `molecule` parameter is required because the centroid must come from the
+    current coordinates of a specific conformer-bearing RDKit object.
+    We are currently checking only the simple case of a molecule with at least
+    one conformer and at least one atom, because that is enough for QC,
+    debugging, and pose-drift checks in this docking workflow.
+    """
+    if molecule.GetNumConformers() == 0:
+        raise ValueError("Molecule has no conformer.")
+
+    atom_count = molecule.GetNumAtoms()
+    if atom_count == 0:
+        raise ValueError("Molecule has no atoms.")
+
+    conformer = molecule.GetConformer()
+
+    x_sum = 0.0
+    y_sum = 0.0
+    z_sum = 0.0
+
+    for atom_index in range(atom_count):
+        position = conformer.GetAtomPosition(atom_index)
+        x_sum += float(position.x)
+        y_sum += float(position.y)
+        z_sum += float(position.z)
+
+    return (
+        x_sum / atom_count,
+        y_sum / atom_count,
+        z_sum / atom_count,
+    )
+
+
+def point_distance(
+    left: tuple[float, float, float],
+    right: tuple[float, float, float],
+) -> float:
+    """Return Euclidean distance between two 3D points.
+
+    This helper exists so coarse pose-shift checks can stay readable and avoid
+    repeating the same distance expression at multiple call sites.
+    The `left` and `right` parameters are required because the typical use here
+    is to compare centroids or other compact 3D summaries derived from molecules.
+    We are currently computing only the standard Euclidean distance in Cartesian
+    space, because that is the intended quick QC metric for roundtrip and
+    reconstruction tests in this docking workflow.
+    """
+    return math.sqrt((left[0] - right[0]) ** 2 + (left[1] - right[1]) ** 2 + (left[2] - right[2]) ** 2)
 
 
 def _summarize_stderr(stderr: str, max_lines: int = 4) -> str:
@@ -212,7 +321,7 @@ def _write_process_log(
     command: list[str],
     title: str,
 ) -> None:
-    """Write complete subprocess stdout/stderr to a plain-text log file.
+    """Write complete subprocess stdout and stderr to a plain-text log file.
 
     This helper is deliberately separate from `_summarize_stderr()` because the
     module needs both a short terminal summary and a complete on-disk record.
@@ -277,6 +386,9 @@ def _parse_vina_best_score(stdout: str) -> float | None:
     standard output rather than to a separate machine-readable file.
     We are currently checking only the first-ranked pose because the current
     adapter uses a minimal top-pose view rather than a full ranked-pose parser.
+
+    Reference:
+    https://autodock-vina.readthedocs.io/en/latest/
     """
     for line in stdout.splitlines():
         stripped = line.strip()
@@ -439,6 +551,9 @@ def export_pdbqt_to_sdf(
     We are currently checking that raw export succeeds first, then only if
     reconstruction was requested do we rebuild chemistry while preserving the
     exported coordinates as much as possible.
+
+    Reference:
+    https://meeko.readthedocs.io/
     """
     if shutil.which(mk_export_binary) is None:
         raise RuntimeError(f"Meeko export executable not found in PATH: {mk_export_binary}")
@@ -558,7 +673,6 @@ def convert_receptor_pdb_to_pdbqt(
     to the external conversion tool.
 
     Reference:
-    Vina's documented basic workflow assumes prepared receptor and ligand files:
     https://autodock-vina.readthedocs.io/en/latest/docking_basic.html
     """
     receptor_pdb = Path(receptor_pdb).resolve()
@@ -657,6 +771,9 @@ def prepare_ligand_with_meeko(
     We are currently checking that SMILES inputs are embedded and optimized into
     3D, while RDKit molecules already carry at least one conformer and only need
     naming normalization plus Meeko conversion.
+
+    Reference:
+    https://meeko.readthedocs.io/
     """
     output_path = Path(output_path).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -774,6 +891,9 @@ class VinaEngine:
         inputs, while the optional parameters expose common runtime controls.
         We are currently checking only the flags needed by the present workflow
         and passing any extra flags through transparently rather than validating them.
+
+        Reference:
+        https://autodock-vina.readthedocs.io/en/latest/docking_basic.html
         """
         cmd: list[str] = [
             self.binary,

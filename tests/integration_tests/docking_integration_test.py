@@ -8,12 +8,15 @@ The goal here is to verify external-tool workflows end to end.
 
 from __future__ import annotations
 
-import math
 import shutil
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
-from rdkit import Chem
+
+if TYPE_CHECKING:
+    from rdkit import Chem
+
 from rdkit.Chem import rdMolAlign
 
 from gbsa_pipeline.docking import (
@@ -21,7 +24,11 @@ from gbsa_pipeline.docking import (
     DockingRequest,
     VinaEngine,
     export_pdbqt_to_sdf,
+    load_first_sdf_molecule,
+    molecule_centroid,
+    point_distance,
     prepare_ligand_with_meeko,
+    remove_hydrogens_copy,
 )
 
 TESTDATA = Path(__file__).parents[1] / "testdata"
@@ -35,90 +42,6 @@ DOCKPROTEIN_BOX = DockingBox(
 )
 
 
-def _read_first_sdf_molecule(path: Path) -> Chem.Mol:
-    """Read the first molecule from an SDF file.
-
-    This helper exists so every integration test uses the same SDF-loading
-    behavior and fails in the same way when the fixture is broken.
-    The `path` parameter is required because these tests use several derived
-    SDF files written during roundtrip and reconstruction steps.
-    We are currently checking that the requested SDF exists structurally as a
-    usable RDKit molecule, not just as a text file on disk.
-    """
-    supplier = Chem.SDMolSupplier(str(path), removeHs=False)
-    molecule = supplier[0]
-
-    if molecule is None:
-        raise ValueError(f"Could not read first molecule from SDF: {path}")
-
-    return molecule
-
-
-def _centroid(molecule: Chem.Mol) -> tuple[float, float, float]:
-    """Compute the geometric centroid of all atoms in one conformer.
-
-    This helper is used as a coarse pose-preservation check when we compare a
-    raw exported ligand to its reconstructed version.
-    The `molecule` parameter is required because we want to evaluate the
-    coordinates of whichever intermediate object the test is currently studying.
-    We are currently checking that reconstruction does not shift the whole
-    ligand to a different part of space even if bonding is rewritten.
-    """
-    if molecule.GetNumConformers() == 0:
-        raise ValueError("Molecule has no conformer.")
-
-    conformer = molecule.GetConformer()
-    atom_count = molecule.GetNumAtoms()
-
-    x_sum = 0.0
-    y_sum = 0.0
-    z_sum = 0.0
-
-    for atom_index in range(atom_count):
-        position = conformer.GetAtomPosition(atom_index)
-        x_sum += float(position.x)
-        y_sum += float(position.y)
-        z_sum += float(position.z)
-
-    return (
-        x_sum / atom_count,
-        y_sum / atom_count,
-        z_sum / atom_count,
-    )
-
-
-def _distance(
-    left: tuple[float, float, float],
-    right: tuple[float, float, float],
-) -> float:
-    """Return Euclidean distance between two 3D points.
-
-    This helper exists so centroid-shift checks stay readable inside the tests.
-    The `left` and `right` parameters are needed because the tests compare
-    centroids from raw and rebuilt molecules, or other pose-like summaries.
-    We are currently checking whether two objects occupy almost the same region
-    of space after export and chemistry reconstruction.
-    """
-    return math.sqrt((left[0] - right[0]) ** 2 + (left[1] - right[1]) ** 2 + (left[2] - right[2]) ** 2)
-
-
-def _heavy_molecule(molecule: Chem.Mol) -> Chem.Mol:
-    """Return a copy of a molecule with hydrogens removed.
-
-    We use heavy-atom-only comparisons because RDKit's own documentation warns
-    that hydrogen-rich symmetry matching can lead to combinatorial explosion in
-    RMS calculations, which is exactly the wrong failure mode for pose tests.
-    The `molecule` parameter is required because every test stage may generate
-    a different molecule object that still needs a fair, comparable metric.
-    We are currently checking pose preservation and chemistry on the stable
-    heavy-atom scaffold rather than on hydrogen placement details.
-
-    Reference:
-    https://www.rdkit.org/docs/source/rdkit.Chem.rdMolAlign.html
-    """
-    return Chem.RemoveHs(Chem.Mol(molecule))
-
-
 def _bond_order_sum(molecule: Chem.Mol) -> float:
     """Return the sum of bond orders over the heavy-atom graph.
 
@@ -130,7 +53,7 @@ def _bond_order_sum(molecule: Chem.Mol) -> float:
     We are currently checking coarse bond-order restoration, not a full graph
     isomorphism proof of chemical correctness.
     """
-    heavy = _heavy_molecule(molecule)
+    heavy = remove_hydrogens_copy(molecule)
     return sum(bond.GetBondTypeAsDouble() for bond in heavy.GetBonds())
 
 
@@ -144,7 +67,7 @@ def _aromatic_bond_count(molecule: Chem.Mol) -> int:
     We are currently checking whether reconstruction restores at least this
     basic aromatic feature set without disturbing the coordinates.
     """
-    heavy = _heavy_molecule(molecule)
+    heavy = remove_hydrogens_copy(molecule)
     return sum(1 for bond in heavy.GetBonds() if bond.GetIsAromatic())
 
 
@@ -222,8 +145,8 @@ def test_pdbqt_to_sdf_roundtrip_preserves_pose(tmp_path: Path) -> None:
     This test isolates export behavior without docking so that failures can be
     attributed to Meeko preparation or mk_export-based roundtrip handling
     rather than to Vina sampling.
-    The `tmp_path` parameter is required because all generated artifacts should
-    remain local to the test run and not pollute versioned fixture directories.
+    The outputs are written into `tmp_path` so the integration test remains
+    self-contained and does not modify repository fixtures.
     We are currently checking that a ligand prepared to PDBQT and exported back
     to SDF stays close in heavy-atom geometry to the original template ligand.
 
@@ -241,7 +164,7 @@ def test_pdbqt_to_sdf_roundtrip_preserves_pose(tmp_path: Path) -> None:
     roundtrip_pdbqt = tmp_path / "dockligand_roundtrip.pdbqt"
     roundtrip_raw_sdf = tmp_path / "dockligand_roundtrip_raw.sdf"
 
-    input_molecule = _read_first_sdf_molecule(DOCKLIGAND_SDF)
+    input_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF)
 
     prepare_ligand_with_meeko(input_molecule, roundtrip_pdbqt, name="DOCKLIG")
     export_pdbqt_to_sdf(roundtrip_pdbqt, roundtrip_raw_sdf)
@@ -249,10 +172,10 @@ def test_pdbqt_to_sdf_roundtrip_preserves_pose(tmp_path: Path) -> None:
     assert roundtrip_pdbqt.exists()
     assert roundtrip_raw_sdf.exists()
 
-    exported_molecule = _read_first_sdf_molecule(roundtrip_raw_sdf)
+    exported_molecule = load_first_sdf_molecule(roundtrip_raw_sdf)
 
-    input_heavy = _heavy_molecule(input_molecule)
-    exported_heavy = _heavy_molecule(exported_molecule)
+    input_heavy = remove_hydrogens_copy(input_molecule)
+    exported_heavy = remove_hydrogens_copy(exported_molecule)
 
     assert input_heavy.GetNumAtoms() > 0
     assert exported_heavy.GetNumAtoms() > 0
@@ -271,8 +194,8 @@ def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_dr
 
     This test is intentionally narrower than the end-to-end docking test and
     exists so chemistry-rebuild failures can be debugged without involving Vina.
-    The `tmp_path` parameter is required because the raw and rebuilt SDF files
-    are intermediate artifacts, not durable fixtures.
+    The outputs are written into `tmp_path` so the integration test remains
+    self-contained and does not modify repository fixtures.
     We are currently checking two things at once: the rebuilt molecule should
     remain where the raw exported molecule is, and its chemistry should match
     the original template at least as well as the raw export does.
@@ -292,7 +215,7 @@ def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_dr
     roundtrip_raw_sdf = tmp_path / "dockligand_roundtrip_raw.sdf"
     roundtrip_rebuilt_sdf = tmp_path / "dockligand_roundtrip_rebuilt.sdf"
 
-    template_molecule = _read_first_sdf_molecule(DOCKLIGAND_SDF)
+    template_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF)
 
     prepare_ligand_with_meeko(template_molecule, roundtrip_pdbqt, name="DOCKLIG")
 
@@ -312,12 +235,12 @@ def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_dr
     assert raw_export_path.exists()
     assert rebuilt_export_path.exists()
 
-    raw_molecule = _read_first_sdf_molecule(raw_export_path)
-    rebuilt_molecule = _read_first_sdf_molecule(rebuilt_export_path)
+    raw_molecule = load_first_sdf_molecule(raw_export_path)
+    rebuilt_molecule = load_first_sdf_molecule(rebuilt_export_path)
 
-    raw_heavy = _heavy_molecule(raw_molecule)
-    rebuilt_heavy = _heavy_molecule(rebuilt_molecule)
-    template_heavy = _heavy_molecule(template_molecule)
+    raw_heavy = remove_hydrogens_copy(raw_molecule)
+    rebuilt_heavy = remove_hydrogens_copy(rebuilt_molecule)
+    template_heavy = remove_hydrogens_copy(template_molecule)
 
     assert raw_heavy.GetNumAtoms() > 0
     assert rebuilt_heavy.GetNumAtoms() > 0
@@ -326,9 +249,9 @@ def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_dr
     assert raw_heavy.GetNumAtoms() == rebuilt_heavy.GetNumAtoms()
     assert rebuilt_heavy.GetNumAtoms() == template_heavy.GetNumAtoms()
 
-    raw_centroid = _centroid(raw_heavy)
-    rebuilt_centroid = _centroid(rebuilt_heavy)
-    centroid_shift = _distance(raw_centroid, rebuilt_centroid)
+    raw_centroid = molecule_centroid(raw_heavy)
+    rebuilt_centroid = molecule_centroid(rebuilt_heavy)
+    centroid_shift = point_distance(raw_centroid, rebuilt_centroid)
 
     raw_to_rebuilt_rmsd = rdMolAlign.CalcRMS(rebuilt_heavy, raw_heavy)
 
@@ -353,8 +276,8 @@ def test_vina_binary_smoke(tmp_path: Path) -> None:
 
     This is intentionally just a smoke test and should not be interpreted as a
     scientific validation of the docking setup or box choice.
-    The `tmp_path` parameter is required because the prepared ligand PDBQT and
-    Vina output files are runtime artifacts that should not be committed.
+    The outputs are written into `tmp_path` so the integration test remains
+    self-contained and does not modify repository fixtures.
     We are currently checking only that the adapter can prepare input, call
     Vina, and produce one readable pose file with a parsed score.
 
@@ -369,11 +292,17 @@ def test_vina_binary_smoke(tmp_path: Path) -> None:
     if not DOCKPROTEIN_PDB.exists():
         pytest.skip(f"missing receptor test file: {DOCKPROTEIN_PDB}")
 
+    if not DOCKLIGAND_SDF.exists():
+        pytest.skip(f"missing ligand test file: {DOCKLIGAND_SDF}")
+
+    docking_input_pdbqt = tmp_path / "dockligand_for_docking.pdbqt"
+    docking_output_pdbqt = tmp_path / "dockligand_for_docking_vina_out.pdbqt"
+
     engine = VinaEngine(binary="vina")
     docking_input_pdbqt = tmp_path / "dockligand_for_docking.pdbqt"
 
     prepare_ligand_with_meeko(
-        _read_first_sdf_molecule(DOCKLIGAND_SDF),
+        load_first_sdf_molecule(DOCKLIGAND_SDF),
         docking_input_pdbqt,
         name="DOCKLIG",
     )
@@ -389,39 +318,12 @@ def test_vina_binary_smoke(tmp_path: Path) -> None:
 
     assert result.engine == "vina"
     assert len(result.poses) == 1
+    assert result.poses[0].pose_path == docking_output_pdbqt
     assert result.poses[0].pose_path.exists()
     assert result.poses[0].metadata["returncode"] == 0
     assert result.poses[0].score is not None
 
 
-# ┌─────────────────────────────────────────────────────────────────────────────┐
-# │ TEMPORARY PULL-REQUEST DEBUG NOTE                                          │
-# ├─────────────────────────────────────────────────────────────────────────────┤
-# │ This end-to-end test intentionally documents every workflow input and       │
-# │ output so the full docking and reconstruction path can be shown during      │
-# │ pull-request review. The long-term version should keep all generated        │
-# │ artifacts in tmp_path only, but for review discussion it is useful to       │
-# │ state explicitly what goes in and what comes out at each stage.             │
-# │                                                                             │
-# │ Static inputs from tests/testdata/docking/                                  │
-# │   - dockprotein.pdb                                                         │
-# │   - dockligand.sdf                                                          │
-# │                                                                             │
-# │ Runtime outputs produced inside tmp_path during this test                   │
-# │   - dockligand_for_docking.pdbqt                                            │
-# │   - dockligand_for_docking_vina_out.pdbqt                                   │
-# │   - dockligand_for_docking_vina_out_raw.sdf                                 │
-# │   - dockligand_for_docking_vina_out_rebuilt.sdf                             │
-# │                                                                             │
-# │ Scientific intent                                                           │
-# │   - template ligand SDF provides the chemistry                              │
-# │   - docked Vina pose PDBQT provides the coordinates                         │
-# │   - rebuilt final SDF must keep the docked position while recovering        │
-# │     chemistry from the original ligand template                             │
-# │                                                                             │
-# │ This comment block is temporary and exists so the pull request can show     │
-# │ Davide exactly what this module is doing end to end.                        │
-# └─────────────────────────────────────────────────────────────────────────────┘
 @pytest.mark.integration
 def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position(
     tmp_path: Path,
@@ -429,10 +331,9 @@ def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position
     """Run the full ligand-prep, docking, export, and reconstruction workflow.
 
     This is the real end-to-end test for the current docking segment and it is
-    the one that matters most scientifically for your reconstruction logic.
-    The `tmp_path` parameter is required because we need several intermediate
-    files: prepared ligand PDBQT, docked pose PDBQT, raw exported SDF, and
-    rebuilt exported SDF.
+    the one that matters most scientifically for the reconstruction logic.
+    The generated docking artifacts are written into `tmp_path` so the workflow
+    stays isolated while still exercising the full external-tool path.
     We are currently checking the core rule of the pipeline: the final rebuilt
     ligand must inherit chemistry from the original template while inheriting
     coordinates from the docked pose, not from the pre-docking template.
@@ -454,11 +355,12 @@ def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position
     if not DOCKLIGAND_SDF.exists():
         pytest.skip(f"missing ligand test file: {DOCKLIGAND_SDF}")
 
-    template_molecule = _read_first_sdf_molecule(DOCKLIGAND_SDF)
     docking_input_pdbqt = tmp_path / "dockligand_for_docking.pdbqt"
-    docking_output_pdbqt = tmp_path / "dockligand_for_docking_vina_out.pdbqt"
     docking_output_raw_sdf = tmp_path / "dockligand_for_docking_vina_out_raw.sdf"
     docking_output_rebuilt_sdf = tmp_path / "dockligand_for_docking_vina_out_rebuilt.sdf"
+    docking_output_pdbqt = tmp_path / "dockligand_for_docking_vina_out.pdbqt"
+
+    template_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF)
 
     prepare_ligand_with_meeko(
         template_molecule,
@@ -498,12 +400,12 @@ def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position
     assert raw_docked_sdf.exists()
     assert rebuilt_docked_sdf.exists()
 
-    raw_docked_molecule = _read_first_sdf_molecule(raw_docked_sdf)
-    rebuilt_docked_molecule = _read_first_sdf_molecule(rebuilt_docked_sdf)
+    raw_docked_molecule = load_first_sdf_molecule(raw_docked_sdf)
+    rebuilt_docked_molecule = load_first_sdf_molecule(rebuilt_docked_sdf)
 
-    raw_docked_heavy = _heavy_molecule(raw_docked_molecule)
-    rebuilt_docked_heavy = _heavy_molecule(rebuilt_docked_molecule)
-    template_heavy = _heavy_molecule(template_molecule)
+    raw_docked_heavy = remove_hydrogens_copy(raw_docked_molecule)
+    rebuilt_docked_heavy = remove_hydrogens_copy(rebuilt_docked_molecule)
+    template_heavy = remove_hydrogens_copy(template_molecule)
 
     assert raw_docked_heavy.GetNumAtoms() > 0
     assert rebuilt_docked_heavy.GetNumAtoms() > 0
@@ -512,9 +414,9 @@ def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position
     assert raw_docked_heavy.GetNumAtoms() == rebuilt_docked_heavy.GetNumAtoms()
     assert rebuilt_docked_heavy.GetNumAtoms() == template_heavy.GetNumAtoms()
 
-    raw_centroid = _centroid(raw_docked_heavy)
-    rebuilt_centroid = _centroid(rebuilt_docked_heavy)
-    centroid_shift = _distance(raw_centroid, rebuilt_centroid)
+    raw_centroid = molecule_centroid(raw_docked_heavy)
+    rebuilt_centroid = molecule_centroid(rebuilt_docked_heavy)
+    centroid_shift = point_distance(raw_centroid, rebuilt_centroid)
 
     raw_to_rebuilt_rmsd = rdMolAlign.CalcRMS(
         rebuilt_docked_heavy,
