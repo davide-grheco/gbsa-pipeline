@@ -1,0 +1,17 @@
+Open Babel receptor conversion log for dockprotein.pdb
+======================================================
+
+Command:
+obabel /home/grheco/repositorios/gbsa-pipeline/tests/testdata/docking/dockprotein.pdb -O /home/grheco/repositorios/gbsa-pipeline/tests/testdata/docking/dockprotein.pdbqt -xr -xn -xp -xh
+
+Return code:
+0
+
+STDOUT
+------
+
+
+STDERR
+------
+1 molecule converted
+

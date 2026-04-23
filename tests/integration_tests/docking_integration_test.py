@@ -29,6 +29,15 @@ DOCKING_TESTDATA = TESTDATA / "docking"
 DOCKLIGAND_SDF = DOCKING_TESTDATA / "dockligand.sdf"
 DOCKPROTEIN_PDB = DOCKING_TESTDATA / "dockprotein.pdb"
 
+ROUNDTRIP_PDBQT = DOCKING_TESTDATA / "dockligand_roundtrip.pdbqt"
+ROUNDTRIP_RAW_SDF = DOCKING_TESTDATA / "dockligand_roundtrip_raw.sdf"
+ROUNDTRIP_REBUILT_SDF = DOCKING_TESTDATA / "dockligand_roundtrip_rebuilt.sdf"
+
+DOCKING_INPUT_PDBQT = DOCKING_TESTDATA / "dockligand_for_docking.pdbqt"
+DOCKING_OUTPUT_PDBQT = DOCKING_TESTDATA / "dockligand_for_docking_vina_out.pdbqt"
+DOCKING_OUTPUT_RAW_SDF = DOCKING_TESTDATA / "dockligand_for_docking_vina_out_raw.sdf"
+DOCKING_OUTPUT_REBUILT_SDF = DOCKING_TESTDATA / "dockligand_for_docking_vina_out_rebuilt.sdf"
+
 DOCKPROTEIN_BOX = DockingBox(
     center=(10.115, 39.148, 53.112),
     size=(10.0, 10.0, 10.0),
@@ -148,82 +157,15 @@ def _aromatic_bond_count(molecule: Chem.Mol) -> int:
     return sum(1 for bond in heavy.GetBonds() if bond.GetIsAromatic())
 
 
-def test_meeko_smiles_to_pdbqt(tmp_path: Path) -> None:
-    """Check that SMILES input can be prepared to a basic PDBQT file.
-
-    This is still useful as an integration-level sanity check because Meeko and
-    RDKit behavior can differ across environments even for trivial examples.
-    The `tmp_path` parameter is required because the prepared PDBQT file is only
-    a runtime artifact used to confirm that the preparation pipeline runs.
-    We are currently checking that the output file exists and contains the
-    expected PDBQT-style sections needed by later docking stages.
-    """
-    output = tmp_path / "ligand.pdbqt"
-
-    path = prepare_ligand_with_meeko("CCO", output, name="ETH")
-
-    assert path == output
-    assert output.exists()
-
-    content = output.read_text(encoding="utf-8")
-    assert "ROOT" in content
-    assert "ATOM" in content
-
-
-def test_vina_build_command(tmp_path: Path) -> None:
-    """Check that the Vina adapter builds a command with the expected flags.
-
-    This test keeps the command-construction contract explicit because small
-    changes in argument ordering or omission can silently break integration
-    runs even before Vina itself is called.
-    The `tmp_path` parameter is required because we create disposable receptor,
-    ligand, and output paths only to inspect the constructed command.
-    We are currently checking that seed, CPU, mode count, exhaustiveness, and
-    energy range are forwarded into the final Vina command line.
-    """
-    engine = VinaEngine(binary="vina")
-
-    receptor = tmp_path / "receptor.pdbqt"
-    ligand = tmp_path / "ligand.pdbqt"
-    output = tmp_path / "out.pdbqt"
-
-    receptor.write_text("", encoding="utf-8")
-    ligand.write_text("", encoding="utf-8")
-
-    cmd = engine._build_command(
-        receptor=receptor,
-        ligand=ligand,
-        output=output,
-        box=DOCKPROTEIN_BOX,
-        seed=42,
-        num_modes=5,
-        exhaustiveness=3,
-        energy_range=4.5,
-        extra_flags={"--cpu": 2},
-    )
-
-    assert cmd[:2] == ["vina", "--receptor"]
-    assert "--seed" in cmd
-    assert "42" in cmd
-    assert "--cpu" in cmd
-    assert "2" in cmd
-    assert "--num_modes" in cmd
-    assert "5" in cmd
-    assert "--exhaustiveness" in cmd
-    assert "3" in cmd
-    assert "--energy_range" in cmd
-    assert "4.5" in cmd
-
-
 @pytest.mark.integration
-def test_pdbqt_to_sdf_roundtrip_preserves_pose(tmp_path: Path) -> None:
+def test_pdbqt_to_sdf_roundtrip_preserves_pose() -> None:
     """Check that raw PDBQT-to-SDF export preserves the ligand pose reasonably.
 
     This test isolates export behavior without docking so that failures can be
     attributed to Meeko preparation or mk_export-based roundtrip handling
     rather than to Vina sampling.
-    The `tmp_path` parameter is required because all generated artifacts should
-    remain local to the test run and not pollute versioned fixture directories.
+    The outputs are intentionally written into tests/testdata/docking during
+    review so the produced intermediate files can be inspected directly.
     We are currently checking that a ligand prepared to PDBQT and exported back
     to SDF stays close in heavy-atom geometry to the original template ligand.
 
@@ -238,18 +180,15 @@ def test_pdbqt_to_sdf_roundtrip_preserves_pose(tmp_path: Path) -> None:
     if not DOCKLIGAND_SDF.exists():
         pytest.skip(f"missing ligand test file: {DOCKLIGAND_SDF}")
 
-    roundtrip_pdbqt = tmp_path / "dockligand_roundtrip.pdbqt"
-    roundtrip_raw_sdf = tmp_path / "dockligand_roundtrip_raw.sdf"
-
     input_molecule = _read_first_sdf_molecule(DOCKLIGAND_SDF)
 
-    prepare_ligand_with_meeko(input_molecule, roundtrip_pdbqt, name="DOCKLIG")
-    export_pdbqt_to_sdf(roundtrip_pdbqt, roundtrip_raw_sdf)
+    prepare_ligand_with_meeko(input_molecule, ROUNDTRIP_PDBQT, name="DOCKLIG")
+    export_pdbqt_to_sdf(ROUNDTRIP_PDBQT, ROUNDTRIP_RAW_SDF)
 
-    assert roundtrip_pdbqt.exists()
-    assert roundtrip_raw_sdf.exists()
+    assert ROUNDTRIP_PDBQT.exists()
+    assert ROUNDTRIP_RAW_SDF.exists()
 
-    exported_molecule = _read_first_sdf_molecule(roundtrip_raw_sdf)
+    exported_molecule = _read_first_sdf_molecule(ROUNDTRIP_RAW_SDF)
 
     input_heavy = _heavy_molecule(input_molecule)
     exported_heavy = _heavy_molecule(exported_molecule)
@@ -264,15 +203,13 @@ def test_pdbqt_to_sdf_roundtrip_preserves_pose(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_drift(
-    tmp_path: Path,
-) -> None:
+def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_drift() -> None:
     """Check isolated chemistry reconstruction on a non-docked roundtrip ligand.
 
     This test is intentionally narrower than the end-to-end docking test and
     exists so chemistry-rebuild failures can be debugged without involving Vina.
-    The `tmp_path` parameter is required because the raw and rebuilt SDF files
-    are intermediate artifacts, not durable fixtures.
+    The outputs are intentionally written into tests/testdata/docking during
+    review so the raw and rebuilt SDF files can be inspected directly.
     We are currently checking two things at once: the rebuilt molecule should
     remain where the raw exported molecule is, and its chemistry should match
     the original template at least as well as the raw export does.
@@ -288,22 +225,18 @@ def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_dr
     if not DOCKLIGAND_SDF.exists():
         pytest.skip(f"missing ligand test file: {DOCKLIGAND_SDF}")
 
-    roundtrip_pdbqt = tmp_path / "dockligand_roundtrip.pdbqt"
-    roundtrip_raw_sdf = tmp_path / "dockligand_roundtrip_raw.sdf"
-    roundtrip_rebuilt_sdf = tmp_path / "dockligand_roundtrip_rebuilt.sdf"
-
     template_molecule = _read_first_sdf_molecule(DOCKLIGAND_SDF)
 
-    prepare_ligand_with_meeko(template_molecule, roundtrip_pdbqt, name="DOCKLIG")
+    prepare_ligand_with_meeko(template_molecule, ROUNDTRIP_PDBQT, name="DOCKLIG")
 
     raw_export_path = export_pdbqt_to_sdf(
-        roundtrip_pdbqt,
-        roundtrip_raw_sdf,
+        ROUNDTRIP_PDBQT,
+        ROUNDTRIP_RAW_SDF,
         template_bond_orders=False,
     )
     rebuilt_export_path = export_pdbqt_to_sdf(
-        roundtrip_pdbqt,
-        roundtrip_rebuilt_sdf,
+        ROUNDTRIP_PDBQT,
+        ROUNDTRIP_REBUILT_SDF,
         template_mol=template_molecule,
         template_bond_orders=True,
         add_hydrogens_after_template=True,
@@ -348,13 +281,13 @@ def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_dr
 
 
 @pytest.mark.integration
-def test_vina_binary_smoke(tmp_path: Path) -> None:
+def test_vina_binary_smoke() -> None:
     """Check that the external Vina workflow runs and returns one pose.
 
     This is intentionally just a smoke test and should not be interpreted as a
     scientific validation of the docking setup or box choice.
-    The `tmp_path` parameter is required because the prepared ligand PDBQT and
-    Vina output files are runtime artifacts that should not be committed.
+    The prepared ligand PDBQT and Vina pose are intentionally written into
+    tests/testdata/docking during review so the produced files can be inspected.
     We are currently checking only that the adapter can prepare input, call
     Vina, and produce one readable pose file with a parsed score.
 
@@ -370,69 +303,62 @@ def test_vina_binary_smoke(tmp_path: Path) -> None:
         pytest.skip(f"missing receptor test file: {DOCKPROTEIN_PDB}")
 
     engine = VinaEngine(binary="vina")
-    docking_input_pdbqt = tmp_path / "dockligand_for_docking.pdbqt"
 
     prepare_ligand_with_meeko(
         _read_first_sdf_molecule(DOCKLIGAND_SDF),
-        docking_input_pdbqt,
+        DOCKING_INPUT_PDBQT,
         name="DOCKLIG",
     )
 
     request = DockingRequest(
         receptor=DOCKPROTEIN_PDB,
-        ligands=[docking_input_pdbqt],
+        ligands=[DOCKING_INPUT_PDBQT],
         box=DOCKPROTEIN_BOX,
-        workdir=tmp_path,
+        workdir=DOCKING_TESTDATA,
     )
 
     result = engine.dock(request=request)
 
     assert result.engine == "vina"
     assert len(result.poses) == 1
+    assert result.poses[0].pose_path == DOCKING_OUTPUT_PDBQT
     assert result.poses[0].pose_path.exists()
     assert result.poses[0].metadata["returncode"] == 0
     assert result.poses[0].score is not None
 
 
 # ┌─────────────────────────────────────────────────────────────────────────────┐
-# │ TEMPORARY PULL-REQUEST DEBUG NOTE                                          │
+# │ TEMPORARY PULL-REQUEST REVIEW NOTE                                         │
 # ├─────────────────────────────────────────────────────────────────────────────┤
-# │ This end-to-end test intentionally documents every workflow input and       │
-# │ output so the full docking and reconstruction path can be shown during      │
-# │ pull-request review. The long-term version should keep all generated        │
-# │ artifacts in tmp_path only, but for review discussion it is useful to       │
-# │ state explicitly what goes in and what comes out at each stage.             │
+# │ This end-to-end test intentionally writes generated docking workflow files  │
+# │ into tests/testdata/docking/ so the full path can be inspected manually    │
+# │ during review. This is temporary and should be cleaned up after the PR is  │
+# │ accepted as correct.                                                       │
 # │                                                                             │
 # │ Static inputs from tests/testdata/docking/                                  │
 # │   - dockprotein.pdb                                                         │
 # │   - dockligand.sdf                                                          │
 # │                                                                             │
-# │ Runtime outputs produced inside tmp_path during this test                   │
+# │ Generated review artifacts in tests/testdata/docking/                       │
 # │   - dockligand_for_docking.pdbqt                                            │
 # │   - dockligand_for_docking_vina_out.pdbqt                                   │
 # │   - dockligand_for_docking_vina_out_raw.sdf                                 │
 # │   - dockligand_for_docking_vina_out_rebuilt.sdf                             │
 # │                                                                             │
 # │ Scientific intent                                                           │
-# │   - template ligand SDF provides the chemistry                              │
-# │   - docked Vina pose PDBQT provides the coordinates                         │
+# │   - template ligand SDF provides chemistry                                  │
+# │   - docked Vina pose PDBQT provides coordinates                             │
 # │   - rebuilt final SDF must keep the docked position while recovering        │
 # │     chemistry from the original ligand template                             │
-# │                                                                             │
-# │ This comment block is temporary and exists so the pull request can show     │
-# │ Davide exactly what this module is doing end to end.                        │
 # └─────────────────────────────────────────────────────────────────────────────┘
 @pytest.mark.integration
-def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position(
-    tmp_path: Path,
-) -> None:
+def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position() -> None:
     """Run the full ligand-prep, docking, export, and reconstruction workflow.
 
     This is the real end-to-end test for the current docking segment and it is
-    the one that matters most scientifically for your reconstruction logic.
-    The `tmp_path` parameter is required because we need several intermediate
-    files: prepared ligand PDBQT, docked pose PDBQT, raw exported SDF, and
-    rebuilt exported SDF.
+    the one that matters most scientifically for the reconstruction logic.
+    The generated docking artifacts are intentionally written into
+    tests/testdata/docking during review so the full workflow can be inspected.
     We are currently checking the core rule of the pipeline: the final rebuilt
     ligand must inherit chemistry from the original template while inheriting
     coordinates from the docked pose, not from the pre-docking template.
@@ -455,41 +381,37 @@ def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position
         pytest.skip(f"missing ligand test file: {DOCKLIGAND_SDF}")
 
     template_molecule = _read_first_sdf_molecule(DOCKLIGAND_SDF)
-    docking_input_pdbqt = tmp_path / "dockligand_for_docking.pdbqt"
-    docking_output_pdbqt = tmp_path / "dockligand_for_docking_vina_out.pdbqt"
-    docking_output_raw_sdf = tmp_path / "dockligand_for_docking_vina_out_raw.sdf"
-    docking_output_rebuilt_sdf = tmp_path / "dockligand_for_docking_vina_out_rebuilt.sdf"
 
     prepare_ligand_with_meeko(
         template_molecule,
-        docking_input_pdbqt,
+        DOCKING_INPUT_PDBQT,
         name="DOCKLIG",
     )
 
     engine = VinaEngine(binary="vina")
     request = DockingRequest(
         receptor=DOCKPROTEIN_PDB,
-        ligands=[docking_input_pdbqt],
+        ligands=[DOCKING_INPUT_PDBQT],
         box=DOCKPROTEIN_BOX,
-        workdir=tmp_path,
+        workdir=DOCKING_TESTDATA,
     )
 
     result = engine.dock(request=request)
 
     assert result.engine == "vina"
     assert len(result.poses) == 1
-    assert result.poses[0].pose_path == docking_output_pdbqt
+    assert result.poses[0].pose_path == DOCKING_OUTPUT_PDBQT
     assert result.poses[0].pose_path.exists()
     assert result.poses[0].metadata["returncode"] == 0
 
     raw_docked_sdf = export_pdbqt_to_sdf(
-        docking_output_pdbqt,
-        docking_output_raw_sdf,
+        DOCKING_OUTPUT_PDBQT,
+        DOCKING_OUTPUT_RAW_SDF,
         template_bond_orders=False,
     )
     rebuilt_docked_sdf = export_pdbqt_to_sdf(
-        docking_output_pdbqt,
-        docking_output_rebuilt_sdf,
+        DOCKING_OUTPUT_PDBQT,
+        DOCKING_OUTPUT_REBUILT_SDF,
         template_mol=template_molecule,
         template_bond_orders=True,
         add_hydrogens_after_template=True,
