@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 import BioSimSpace as BSS
 from pydantic import BaseModel, ConfigDict
 
-from gbsa_pipeline._bss_utils import _run_bss_process
+from gbsa_pipeline.bss_io import _run_bss_process
 from gbsa_pipeline.change_defaults_enum import (
     Barostat,
     CommMode,
