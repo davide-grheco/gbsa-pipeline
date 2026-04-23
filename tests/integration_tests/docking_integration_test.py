@@ -243,7 +243,6 @@ def test_vina_binary_smoke(tmp_path: Path) -> None:
         pytest.skip(f"missing receptor test file: {DOCKPROTEIN_PDB}")
 
     engine = VinaEngine(binary="vina")
-
     docking_input_pdbqt = tmp_path / "dockligand_for_docking.pdbqt"
 
     prepare_ligand_with_meeko(
