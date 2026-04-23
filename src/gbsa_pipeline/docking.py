@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from meeko import MoleculePreparation, PDBQTMolecule, PDBQTWriterLegacy, RDKitMolCreate
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from rdkit import Chem
-from rdkit.Chem import AllChem, rdmolops
+from rdkit.Chem import AllChem, rdmolops, rdMolTransforms
 from rdkit.Chem.rdDistGeom import EmbedMolecule
 from rdkit.Chem.rdForceFieldHelpers import UFFOptimizeMolecule
 
@@ -237,41 +237,31 @@ def remove_hydrogens_copy(molecule: Chem.Mol) -> Chem.Mol:
     return Chem.RemoveHs(Chem.Mol(molecule))
 
 
-def molecule_centroid(molecule: Chem.Mol) -> tuple[float, float, float]:
-    """Compute the geometric centroid of all atoms in one conformer.
+def molecule_centroid(
+    molecule: Chem.Mol,
+    *,
+    conf_id: int = -1,
+    ignore_hs: bool = False,
+) -> tuple[float, float, float]:
+    """Compute the geometric centroid of one molecular conformer.
 
-    This helper exists because pose-comparison code often needs a very cheap
-    spatial summary of a molecule without performing alignment.
-    The `molecule` parameter is required because the centroid must come from the
-    current coordinates of a specific conformer-bearing RDKit object.
-    We are currently checking only the simple case of a molecule with at least
-    one conformer and at least one atom, because that is enough for QC,
-    debugging, and pose-drift checks in this docking workflow.
+    This helper exists because pose-comparison tests need a compact spatial
+    summary without introducing a separate alignment step.
+    The `molecule` parameter provides the coordinates, while `conf_id` allows
+    callers to select a specific conformer when needed.
+    We delegate the actual centroid calculation to RDKit so hydrogen handling
+    and conformer access follow the toolkit implementation instead of local
+    coordinate-loop code.
     """
     if molecule.GetNumConformers() == 0:
         raise ValueError("Molecule has no conformer.")
 
-    atom_count = molecule.GetNumAtoms()
-    if atom_count == 0:
-        raise ValueError("Molecule has no atoms.")
-
-    conformer = molecule.GetConformer()
-
-    x_sum = 0.0
-    y_sum = 0.0
-    z_sum = 0.0
-
-    for atom_index in range(atom_count):
-        position = conformer.GetAtomPosition(atom_index)
-        x_sum += float(position.x)
-        y_sum += float(position.y)
-        z_sum += float(position.z)
-
-    return (
-        x_sum / atom_count,
-        y_sum / atom_count,
-        z_sum / atom_count,
+    center = rdMolTransforms.ComputeCentroid(
+        molecule.GetConformer(conf_id),
+        ignoreHs=ignore_hs,
     )
+
+    return (float(center.x), float(center.y), float(center.z))
 
 
 def point_distance(
