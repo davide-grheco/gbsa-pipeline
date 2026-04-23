@@ -1,10 +1,12 @@
 """Docking helpers for preparing ligands and running AutoDock Vina.
 
-This module provides:
-- lightweight request/result models for docking
-- ligand preparation to PDBQT using RDKit + Meeko
-- optional receptor conversion from PDB to receptor PDBQT via Open Babel
-- a small Vina engine wrapper that writes full subprocess output to log files
+This module is intentionally small and centered on one workflow: take a ligand
+and receptor, prepare the ligand to PDBQT, optionally convert the receptor to
+PDBQT, run Vina, and optionally export or reconstruct the resulting ligand.
+The design tries to keep chemistry restoration separate from docking execution
+so failures can be debugged stage by stage instead of through one large wrapper.
+The current public surface is therefore narrow on purpose and avoids native-
+ligand redocking or box-derivation logic that belongs to a different workflow.
 """
 
 from __future__ import annotations
@@ -32,7 +34,15 @@ LOGGER = logging.getLogger(__name__)
 
 
 class DockingBox(BaseModel):
-    """Docking-box center and size in Angstrom."""
+    """Docking-box center and size in Angstrom.
+
+    This model exists so Vina box inputs stay explicit and typed instead of
+    being passed around as anonymous tuples or dictionaries.
+    The box is required because the docking engine cannot run without a search
+    region, and making it a model helps catch malformed inputs early.
+    We are currently storing only center and size because that is the minimum
+    stable interface needed by the Vina command-line backend.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -41,7 +51,16 @@ class DockingBox(BaseModel):
 
 
 class DockingRequest(BaseModel):
-    """Normalized docking request for a receptor, one or more ligands, and a box."""
+    """Normalized docking request for a receptor, one or more ligands, and a box.
+
+    This model groups the core docking inputs into one validated object so the
+    engine layer receives a stable, explicit contract instead of loosely coupled
+    parameters.
+    The receptor, ligands, and box are required because they define the actual
+    docking problem, while seed, workdir, and parameters control runtime details.
+    We are currently checking mostly filesystem validity and suffix support here,
+    leaving chemistry-specific validation to the preparation and export helpers.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -55,6 +74,15 @@ class DockingRequest(BaseModel):
     @field_validator("receptor")
     @classmethod
     def _check_receptor_exists(cls, path: Path) -> Path:
+        """Validate that the receptor exists and has a Vina-compatible suffix.
+
+        The `path` parameter is needed because the docking engine supports both
+        prebuilt receptor PDBQT files and plain PDB files that still need
+        conversion.
+        We are currently checking only file existence, file-ness, and suffix,
+        because structural receptor correctness belongs to external preparation
+        steps rather than to this thin adapter layer.
+        """
         path = Path(path).resolve()
 
         if not path.exists():
@@ -71,6 +99,14 @@ class DockingRequest(BaseModel):
     @field_validator("ligands")
     @classmethod
     def _check_ligands(cls, ligands: list[Path]) -> list[Path]:
+        """Validate that one or more ligand files are present on disk.
+
+        The `ligands` parameter is a list because the current engine API is
+        allowed to dock multiple prepared ligands against one receptor request.
+        We are currently checking that each path exists and is a file, but not
+        whether each file is chemically valid, because that belongs to ligand
+        preparation and downstream docking itself.
+        """
         if not ligands:
             raise ValueError("At least one ligand file required.")
 
@@ -92,7 +128,16 @@ class DockingRequest(BaseModel):
 
 @dataclass(frozen=True)
 class DockedPose:
-    """Single docked pose plus compact metadata about the docking run."""
+    """Single docked pose plus compact metadata about the docking run.
+
+    This dataclass is intentionally small and stores only what downstream stages
+    need immediately: which ligand was docked, where the pose file is, which
+    score was parsed, and a compact metadata bundle.
+    The metadata field exists because some run details are useful but not
+    important enough to deserve top-level strongly typed fields yet.
+    We are currently using this object as the bridge between docking execution
+    and later export or reconstruction steps.
+    """
 
     ligand: Path
     pose_path: Path
@@ -104,7 +149,15 @@ class DockedPose:
 
 @dataclass(frozen=True)
 class DockingResult:
-    """Collection of produced poses and compact run metadata."""
+    """Collection of produced poses and compact run metadata.
+
+    This dataclass exists so one docking request returns a single structured
+    object even when multiple ligands were processed in one call.
+    The `parameters` field is retained because downstream code often needs to
+    know with which runtime settings the poses were generated.
+    We are currently keeping this result intentionally lightweight and not
+    storing large parsed outputs, because the raw log files already exist on disk.
+    """
 
     poses: list[DockedPose]
     engine: str
@@ -113,7 +166,15 @@ class DockingResult:
 
 
 class DockingEngine(Protocol):
-    """Protocol implemented by docking backends."""
+    """Protocol implemented by docking backends.
+
+    This protocol keeps the rest of the codebase independent from one concrete
+    docking backend implementation.
+    The `dock()` signature is the minimal stable contract the runner or higher
+    workflow code needs in order to call a docking engine generically.
+    We are currently using only Vina, but this protocol avoids hard-coding that
+    assumption into every consumer of the docking module.
+    """
 
     name: str
 
@@ -122,7 +183,15 @@ class DockingEngine(Protocol):
 
 
 def _summarize_stderr(stderr: str, max_lines: int = 4) -> str:
-    """Return a short preview of stderr suitable for terminal output."""
+    """Return a short preview of stderr suitable for terminal output.
+
+    This helper exists because full subprocess stderr is still written to log
+    files, but a compact preview is more useful for immediate terminal feedback.
+    The `stderr` parameter is required because multiple external tools in this
+    module can fail, and the same summarization logic should apply to all of them.
+    We are currently checking only a few leading non-empty lines because this
+    function is meant for human scanability, not for archival completeness.
+    """
     lines = [line.strip() for line in stderr.splitlines() if line.strip()]
     if not lines:
         return "no stderr output"
@@ -143,7 +212,15 @@ def _write_process_log(
     command: list[str],
     title: str,
 ) -> None:
-    """Write complete subprocess stdout/stderr to a plain-text log file."""
+    """Write complete subprocess stdout/stderr to a plain-text log file.
+
+    This helper is deliberately separate from `_summarize_stderr()` because the
+    module needs both a short terminal summary and a complete on-disk record.
+    The `log_path`, `process`, `command`, and `title` parameters are all needed
+    to produce a log file that is self-contained and reviewable later.
+    We are currently writing command, return code, stdout, and stderr verbatim
+    because that is the minimum useful forensic record for external tool failures.
+    """
     resolved_log_path = Path(log_path).resolve()
     resolved_log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -163,7 +240,15 @@ def _write_process_log(
 
 
 def _extract_pdbqt_string_from_meeko_result(result: Any) -> str:
-    """Extract the PDBQT string from Meeko's version-dependent return value."""
+    """Extract the PDBQT string from Meeko's version-dependent return value.
+
+    This helper exists because Meeko's `write_string()` return shape is not
+    always uniform across versions or calling contexts.
+    The `result` parameter is intentionally typed as `Any` because the function
+    is explicitly about normalizing a loosely specified third-party return value.
+    We are currently checking only the cases needed by the observed Meeko API:
+    a plain string or a tuple whose first element is the PDBQT string.
+    """
     if isinstance(result, str):
         return result
 
@@ -184,7 +269,15 @@ def _extract_pdbqt_string_from_meeko_result(result: Any) -> str:
 
 
 def _parse_vina_best_score(stdout: str) -> float | None:
-    """Parse the best affinity from the first row of Vina's result table."""
+    """Parse the best affinity from the first row of Vina's result table.
+
+    This helper exists so the engine can return a compact score without having
+    to store or parse the entire Vina output format structurally.
+    The `stdout` parameter is required because Vina prints the score table to
+    standard output rather than to a separate machine-readable file.
+    We are currently checking only the first-ranked pose because the current
+    adapter uses a minimal top-pose view rather than a full ranked-pose parser.
+    """
     for line in stdout.splitlines():
         stripped = line.strip()
         match = re.match(r"^1\s+(-?\d+(?:\.\d+)?)\s+", stripped)
@@ -200,7 +293,15 @@ def _build_compact_pose_metadata(
     output_exists: bool,
     receptor_used: Path,
 ) -> dict[str, Any]:
-    """Build minimal per-pose metadata."""
+    """Build minimal per-pose metadata.
+
+    This helper exists to keep the metadata payload uniform wherever poses are
+    created inside the docking engine.
+    The parameters are intentionally explicit because they are the smallest set
+    of run facts that are still useful for debugging and downstream checks.
+    We are currently storing filesystem- and process-level facts only, not
+    chemistry-level annotations, because those belong elsewhere in the pipeline.
+    """
     return {
         "returncode": returncode,
         "log_file": str(Path(log_file).resolve()),
@@ -210,7 +311,15 @@ def _build_compact_pose_metadata(
 
 
 def _detect_mk_export_output_flag(mk_export_binary: str) -> str:
-    """Detect the output flag supported by mk_export.py."""
+    """Detect the output flag supported by mk_export.py.
+
+    This helper exists because installed `mk_export.py` versions may differ in
+    whether they expect `-s`, `-o`, or another syntax for SDF output.
+    The `mk_export_binary` parameter is required because callers may provide a
+    non-default executable name or wrapper script.
+    We are currently checking only the help text for the output flags actually
+    observed in practice, because this is a compatibility shim rather than a full CLI parser.
+    """
     process: CompletedProcess[str] = run(  # noqa: S603
         [mk_export_binary, "-h"],
         capture_output=True,
@@ -236,7 +345,15 @@ def _copy_heavy_atom_coordinates_if_possible(
     target_mol: Chem.Mol,
     source_mol: Chem.Mol,
 ) -> Chem.Mol:
-    """Copy heavy-atom coordinates from source to target when atom counts match."""
+    """Copy heavy-atom coordinates from source to target when atom counts match.
+
+    This helper is part of the pose-preservation rule: when chemistry is rebuilt
+    from a template, coordinates should still come from the docked or exported pose.
+    The `target_mol` and `source_mol` parameters are both needed because the
+    target carries the desired bonding pattern while the source carries the desired geometry.
+    We are currently checking only the simple, conservative case where heavy-atom
+    counts match exactly and the rebuilt target still has no conformer of its own.
+    """
     if source_mol.GetNumConformers() == 0:
         return target_mol
 
@@ -264,7 +381,21 @@ def assign_bond_orders_from_template_mol(
     *,
     add_hydrogens: bool = False,
 ) -> Chem.Mol:
-    """Rebuild target bond orders from a template while preserving target geometry."""
+    """Rebuild target bond orders from a template while preserving target geometry.
+
+    This is the central chemistry-restoration function in the module, and it is
+    intentionally separate from raw export so chemistry and coordinates can be
+    reasoned about independently.
+    The `template_mol` parameter is required because it is the trusted source of
+    bond orders, while `target_mol` is required because it carries the pose that
+    must be preserved after reconstruction.
+    We are currently using RDKit's `AssignBondOrdersFromTemplate()` for the
+    chemistry step and then reapplying coordinates from the target molecule so
+    the rebuilt ligand does not drift away from the docked position.
+
+    Reference:
+    https://www.rdkit.org/docs/source/rdkit.Chem.AllChem.html
+    """
     if template_mol is None:
         raise ValueError("template_mol is None.")
 
@@ -298,7 +429,17 @@ def export_pdbqt_to_sdf(
     template_bond_orders: bool = False,
     add_hydrogens_after_template: bool = True,
 ) -> Path:
-    """Export a PDBQT file to SDF, optionally rebuilding bond orders from a template."""
+    """Export a PDBQT file to SDF, optionally rebuilding bond orders from a template.
+
+    This function combines two related but distinct steps: raw PDBQT-to-SDF
+    export and optional chemistry reconstruction from a trusted template.
+    The parameters split those concerns explicitly: `pdbqt_path` and `output_sdf`
+    define the file conversion, while `template_mol`, `template_bond_orders`,
+    and `add_hydrogens_after_template` control whether and how chemistry is rebuilt.
+    We are currently checking that raw export succeeds first, then only if
+    reconstruction was requested do we rebuild chemistry while preserving the
+    exported coordinates as much as possible.
+    """
     if shutil.which(mk_export_binary) is None:
         raise RuntimeError(f"Meeko export executable not found in PATH: {mk_export_binary}")
 
@@ -406,7 +547,20 @@ def convert_receptor_pdb_to_pdbqt(
     preserve_atom_indices: bool = True,
     preserve_hydrogens: bool = True,
 ) -> Path:
-    """Convert a receptor PDB to rigid receptor PDBQT using Open Babel."""
+    """Convert a receptor PDB to rigid receptor PDBQT using Open Babel.
+
+    This helper exists because docking often starts from a receptor PDB even
+    when Vina requires a receptor PDBQT for execution.
+    The optional preservation flags are needed because atom names, indices, and
+    existing hydrogens can matter for debugging and downstream interpretation.
+    We are currently checking only that Open Babel runs successfully and that
+    the expected output file is created, while leaving receptor chemistry policy
+    to the external conversion tool.
+
+    Reference:
+    Vina's documented basic workflow assumes prepared receptor and ligand files:
+    https://autodock-vina.readthedocs.io/en/latest/docking_basic.html
+    """
     receptor_pdb = Path(receptor_pdb).resolve()
 
     if not receptor_pdb.exists():
@@ -494,7 +648,16 @@ def prepare_ligand_with_meeko(
     output_path: Path,
     name: str | None = None,
 ) -> Path:
-    """Prepare a SMILES string or RDKit molecule as ligand PDBQT."""
+    """Prepare a SMILES string or RDKit molecule as ligand PDBQT.
+
+    This helper exists so ligand preparation is handled in one place and the
+    rest of the module can assume prepared PDBQT ligand inputs when needed.
+    The `ligand` parameter accepts either a SMILES string or an RDKit molecule
+    because those are the two explicit input types chosen for this minimal API.
+    We are currently checking that SMILES inputs are embedded and optimized into
+    3D, while RDKit molecules already carry at least one conformer and only need
+    naming normalization plus Meeko conversion.
+    """
     output_path = Path(output_path).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -555,7 +718,15 @@ def prepare_ligand_with_meeko(
 
 
 class VinaEngine:
-    """Minimal AutoDock Vina wrapper."""
+    """Minimal AutoDock Vina wrapper.
+
+    This class deliberately stays small and only covers what is needed to turn
+    a validated request into one or more docked pose files plus compact metadata.
+    It does not own ligand preparation, chemistry reconstruction, or box
+    generation, because those are separate concerns in this module.
+    We are currently keeping the engine narrowly focused on command construction,
+    receptor readiness, subprocess execution, score parsing, and result assembly.
+    """
 
     name = "vina"
 
@@ -564,7 +735,15 @@ class VinaEngine:
         binary: str = "vina",
         obabel_binary: str = "obabel",
     ) -> None:
-        """Initialize executable names for Vina and Open Babel."""
+        """Initialize executable names for Vina and Open Babel.
+
+        The binary names are configurable because development and CI environments
+        often expose the tools under different names or wrappers.
+        Both parameters are required to keep receptor conversion and docking
+        execution under the same engine object without hard-coding global paths.
+        We are currently checking only whether the executables appear in PATH and
+        leaving actual runtime validity to the conversion and docking calls.
+        """
         if shutil.which(binary) is None:
             LOGGER.warning("Vina binary not found in PATH: %s", binary)
 
@@ -587,7 +766,15 @@ class VinaEngine:
         energy_range: float | None = None,
         extra_flags: Mapping[str, Any] | None = None,
     ) -> list[str]:
-        """Build the Vina command line for a single ligand."""
+        """Build the Vina command line for a single ligand.
+
+        This helper exists so command construction is isolated from the rest of
+        the execution logic and can be tested directly.
+        The receptor, ligand, output, and box parameters are the minimal Vina
+        inputs, while the optional parameters expose common runtime controls.
+        We are currently checking only the flags needed by the present workflow
+        and passing any extra flags through transparently rather than validating them.
+        """
         cmd: list[str] = [
             self.binary,
             "--receptor",
@@ -635,7 +822,15 @@ class VinaEngine:
         receptor: Path,
         workdir: Path,
     ) -> Path:
-        """Return the receptor PDBQT to use for docking."""
+        """Return the receptor PDBQT to use for docking.
+
+        This helper exists so the engine can accept either a preprepared PDBQT
+        receptor or a plain PDB receptor that still needs conversion.
+        The `receptor` parameter is the user-provided input, while `workdir` is
+        required because on-the-fly receptor conversion needs a destination path.
+        We are currently checking only file-type routing here: use PDBQT as-is,
+        convert PDB via Open Babel, and reject anything else explicitly.
+        """
         receptor = Path(receptor).resolve()
 
         if receptor.suffix.lower() == ".pdbqt":
@@ -651,7 +846,17 @@ class VinaEngine:
         raise ValueError(f"Unsupported receptor file type for docking: {receptor}")
 
     def dock(self, request: DockingRequest) -> DockingResult:
-        """Run docking for all ligands in the request."""
+        """Run docking for all ligands in the request.
+
+        This is the one method that actually executes the backend and turns a
+        validated request into structured pose outputs.
+        The `request` parameter is required because it carries the complete
+        docking contract: receptor, ligands, box, working directory, and runtime
+        options in one validated object.
+        We are currently checking a minimal but useful workflow: prepare the
+        receptor if needed, run Vina ligand by ligand, parse the top score if
+        possible, write full logs, and return structured pose records.
+        """
         workdir = request.workdir or Path.cwd()
         workdir = Path(workdir).resolve()
         workdir.mkdir(parents=True, exist_ok=True)
