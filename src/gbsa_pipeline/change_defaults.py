@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import os
 from collections.abc import Mapping
 from enum import Enum
 from tempfile import NamedTemporaryFile
@@ -14,6 +16,7 @@ if TYPE_CHECKING:
 import BioSimSpace as BSS
 from pydantic import BaseModel, ConfigDict
 
+from gbsa_pipeline._bss_utils import _run_bss_process
 from gbsa_pipeline.change_defaults_enum import (
     Barostat,
     CommMode,
@@ -182,11 +185,15 @@ class GromacsCustom(BSS.Protocol.Custom):
 
         with NamedTemporaryFile("w", suffix=".mdp", delete=False, encoding="utf-8") as tmp:
             tmp.write("\n".join(lines) + "\n")
-            mdp_path = tmp.name
+            self._tmp_mdp_path = tmp.name
 
-        super().__init__(mdp_path)
+        super().__init__(self._tmp_mdp_path)
 
         self._parameters = self.params.to_mapping()
+
+    def __del__(self) -> None:
+        with contextlib.suppress(Exception):
+            os.unlink(self._tmp_mdp_path)
 
 
 # ============================================================================
@@ -197,8 +204,7 @@ class GromacsCustom(BSS.Protocol.Custom):
 def run_gro_custom(
     parameters: Mapping[str, Any] | GromacsParams | None,
     system: BSS._SireWrappers.System,
-    changes: Mapping[str, Any] | None = None,
-    params: Mapping[str, Any] | GromacsParams | None = None,
+    overrides: Mapping[str, Any] | GromacsParams | None = None,
     work_dir: Path | None = None,
 ) -> tuple[BSS._SireWrappers.System, BSS.Protocol]:
     """Create protocol from params only, run GROMACS, return (system, protocol)."""
@@ -208,25 +214,18 @@ def run_gro_custom(
 
     merged = base_params.to_mapping()
 
-    if changes is not None:
-        merged.update(changes)
-
-    if params is not None:
-        merged.update(params if isinstance(params, Mapping) else params.to_mapping())
+    if overrides is not None:
+        override_map = overrides if isinstance(overrides, Mapping) else overrides.to_mapping()
+        merged.update(override_map)
+        logger.info("Applied %d mdp overrides.", len(override_map))
 
     final_params = GromacsParams.from_mapping(merged)
-
     custom_protocol = GromacsCustom(params=final_params)
-
-    if changes:
-        logger.info("Applied %d mdp overrides from mapping.", len(changes))
 
     logger.info("Starting GROMACS process.")
     kwargs = {"work_dir": str(work_dir)} if work_dir else {}
     process = BSS.Process.Gromacs(system, protocol=custom_protocol, **kwargs)
-    process.start()
-    process.wait()
+    customized = _run_bss_process(process)
     logger.info("Process finished.")
 
-    customized = process.getSystem(block=True)
     return customized, custom_protocol

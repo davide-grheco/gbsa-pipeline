@@ -111,7 +111,7 @@ def test_run_gro_custom_applies_overrides(monkeypatch: pytest.MonkeyPatch, tmp_p
     customized, protocol = run_gro_custom(
         parameters=None,
         system=system,
-        params={"nsteps": 20},
+        overrides={"nsteps": 20},
     )
 
     assert customized is system
