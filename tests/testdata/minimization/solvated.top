@@ -1,5 +1,9 @@
 ; Gromacs Topology File written by Sire
+<<<<<<< HEAD
 ; File written 04/22/26  10:21:45
+=======
+; File written 04/04/26  16:28:28
+>>>>>>> 3cc0b32 (Adding logs and improvement for GRUBICY integration)
 [ defaults ]
 ; nbfunc      comb-rule       gen-pairs      fudgeLJ     fudgeQQ
   1           2               yes            1         0.833333
