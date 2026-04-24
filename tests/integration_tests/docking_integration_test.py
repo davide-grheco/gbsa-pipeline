@@ -1,3 +1,5 @@
+# tests/integration_tests/docking_integration_test.py
+
 """Integration tests for the lightweight docking adapter layer.
 
 This module keeps only integration-level checks.
@@ -13,10 +15,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-
-if TYPE_CHECKING:
-    from rdkit import Chem
-
 from rdkit.Chem import rdMolAlign
 
 from gbsa_pipeline.docking import (
@@ -31,6 +29,10 @@ from gbsa_pipeline.docking import (
     remove_hydrogens_copy,
 )
 
+if TYPE_CHECKING:
+    from rdkit import Chem
+
+
 TESTDATA = Path(__file__).parents[1] / "testdata"
 DOCKING_TESTDATA = TESTDATA / "docking"
 DOCKLIGAND_SDF = DOCKING_TESTDATA / "dockligand.sdf"
@@ -40,6 +42,25 @@ DOCKPROTEIN_BOX = DockingBox(
     center=(10.115, 39.148, 53.112),
     size=(10.0, 10.0, 10.0),
 )
+
+
+def _assert_basic_pdbqt_content(path: Path) -> None:
+    """Check that a prepared ligand file contains basic PDBQT sections.
+
+    This helper exists because Meeko output details can vary slightly between
+    versions, while downstream docking only needs a syntactically useful PDBQT
+    file at this test level.
+    The `path` parameter is required because the test should verify the actual
+    file written by the public preparation helper, not an in-memory string.
+    We currently check for a root section and at least one atom-like record,
+    accepting either ATOM or HETATM because both are valid PDB-style records that
+    can appear in ligand PDBQT output.
+    """
+    content = Path(path).read_text(encoding="utf-8")
+
+    assert "ROOT" in content
+    assert "ENDROOT" in content
+    assert "ATOM" in content or "HETATM" in content
 
 
 def _bond_order_sum(molecule: Chem.Mol) -> float:
@@ -87,10 +108,32 @@ def test_meeko_smiles_to_pdbqt(tmp_path: Path) -> None:
 
     assert path == output
     assert output.exists()
+    _assert_basic_pdbqt_content(output)
 
-    content = output.read_text(encoding="utf-8")
-    assert "ROOT" in content
-    assert "ATOM" in content
+
+def test_meeko_rdkit_mol_to_pdbqt(tmp_path: Path) -> None:
+    """Check that an RDKit molecule input can be prepared to PDBQT.
+
+    This test protects the current Meeko integration path used by the real
+    docking workflow, where ligands commonly arrive from SDF files as RDKit
+    molecules rather than as SMILES strings.
+    The `tmp_path` parameter is required because the prepared PDBQT file is only
+    a disposable runtime artifact used to verify the conversion.
+    We are currently checking the public helper behavior, especially that it can
+    satisfy Meeko's explicit-hydrogen and 3D-coordinate requirements before
+    calling the Meeko preparation API.
+    """
+    if not DOCKLIGAND_SDF.exists():
+        pytest.skip(f"missing ligand test file: {DOCKLIGAND_SDF}")
+
+    output = tmp_path / "dockligand.pdbqt"
+    molecule = load_first_sdf_molecule(DOCKLIGAND_SDF, remove_hs=False)
+
+    path = prepare_ligand_with_meeko(molecule, output, name="DOCKLIG")
+
+    assert path == output
+    assert output.exists()
+    _assert_basic_pdbqt_content(output)
 
 
 def test_vina_build_command(tmp_path: Path) -> None:
@@ -161,13 +204,14 @@ def test_pdbqt_to_sdf_roundtrip_preserves_pose(tmp_path: Path) -> None:
     roundtrip_pdbqt = tmp_path / "dockligand_roundtrip.pdbqt"
     roundtrip_raw_sdf = tmp_path / "dockligand_roundtrip_raw.sdf"
 
-    input_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF)
+    input_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF, remove_hs=False)
 
     prepare_ligand_with_meeko(input_molecule, roundtrip_pdbqt, name="DOCKLIG")
     export_pdbqt_to_sdf(roundtrip_pdbqt, roundtrip_raw_sdf)
 
     assert roundtrip_pdbqt.exists()
     assert roundtrip_raw_sdf.exists()
+    _assert_basic_pdbqt_content(roundtrip_pdbqt)
 
     exported_molecule = load_first_sdf_molecule(roundtrip_raw_sdf)
 
@@ -209,9 +253,10 @@ def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_dr
     roundtrip_raw_sdf = tmp_path / "dockligand_roundtrip_raw.sdf"
     roundtrip_rebuilt_sdf = tmp_path / "dockligand_roundtrip_rebuilt.sdf"
 
-    template_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF)
+    template_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF, remove_hs=False)
 
     prepare_ligand_with_meeko(template_molecule, roundtrip_pdbqt, name="DOCKLIG")
+    _assert_basic_pdbqt_content(roundtrip_pdbqt)
 
     raw_export_path = export_pdbqt_to_sdf(
         roundtrip_pdbqt,
@@ -293,10 +338,11 @@ def test_vina_binary_smoke(tmp_path: Path) -> None:
     engine = VinaEngine(binary="vina")
 
     prepare_ligand_with_meeko(
-        load_first_sdf_molecule(DOCKLIGAND_SDF),
+        load_first_sdf_molecule(DOCKLIGAND_SDF, remove_hs=False),
         docking_input_pdbqt,
         name="DOCKLIG",
     )
+    _assert_basic_pdbqt_content(docking_input_pdbqt)
 
     request = DockingRequest(
         receptor=DOCKPROTEIN_PDB,
@@ -348,13 +394,14 @@ def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position
     docking_output_rebuilt_sdf = tmp_path / "dockligand_for_docking_vina_out_rebuilt.sdf"
     docking_output_pdbqt = tmp_path / "dockligand_for_docking_vina_out.pdbqt"
 
-    template_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF)
+    template_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF, remove_hs=False)
 
     prepare_ligand_with_meeko(
         template_molecule,
         docking_input_pdbqt,
         name="DOCKLIG",
     )
+    _assert_basic_pdbqt_content(docking_input_pdbqt)
 
     engine = VinaEngine(binary="vina")
     request = DockingRequest(
