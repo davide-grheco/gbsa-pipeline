@@ -1,7 +1,9 @@
+# /home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/docking.py
+
 """Docking helpers for preparing ligands and running AutoDock Vina.
 
 This module is intentionally small and centered on one workflow: take a ligand
-and receptor, prepare the ligand to PDBQT, optionally convert the receptor to
+and receptor, prepare the ligand to PDBQT, optionally prepare the receptor to
 PDBQT, run Vina, and optionally export or reconstruct the resulting ligand.
 The design tries to keep chemistry restoration separate from docking execution
 so failures can be debugged stage by stage instead of through one large wrapper.
@@ -533,34 +535,33 @@ def convert_receptor_pdb_to_pdbqt(
     receptor_pdb: Path,
     output_path: Path | None = None,
     *,
-    obabel_binary: str = "obabel",
-    preserve_atom_names: bool = True,
-    preserve_atom_indices: bool = True,
-    preserve_hydrogens: bool = True,
+    mk_prepare_receptor_binary: str = "mk_prepare_receptor.py",
 ) -> Path:
-    """Convert a receptor PDB to rigid receptor PDBQT using Open Babel.
+    """Convert a receptor PDB to rigid receptor PDBQT using Meeko.
 
     This helper exists because docking often starts from a receptor PDB even
     when Vina requires a receptor PDBQT for execution.
-    The optional preservation flags are needed because atom names, indices, and
-    existing hydrogens can matter for debugging and downstream interpretation.
-    We are currently checking only that Open Babel runs successfully and that
-    the expected output file is created, while leaving receptor chemistry policy
-    to the external conversion tool.
-
-    Reference:
-    https://autodock-vina.readthedocs.io/en/latest/docking_basic.html
+    The `mk_prepare_receptor_binary` parameter is configurable because different
+    environments may expose Meeko command-line tools through wrappers or explicit
+    executable names.
+    We currently assume the receptor PDB has already been prepared upstream,
+    including hydrogen addition and protonation-state decisions, because Meeko
+    receptor preparation writes the docking representation but should not be
+    treated as a full receptor-cleaning pipeline.
     """
     receptor_pdb = Path(receptor_pdb).resolve()
 
     if not receptor_pdb.exists():
         raise FileNotFoundError(f"Receptor PDB not found: {receptor_pdb}")
 
+    if not receptor_pdb.is_file():
+        raise ValueError(f"Receptor path is not a file: {receptor_pdb}")
+
     if receptor_pdb.suffix.lower() != ".pdb":
         raise ValueError(f"Expected a .pdb receptor input, got: {receptor_pdb}")
 
-    if shutil.which(obabel_binary) is None:
-        raise RuntimeError(f"Open Babel executable not found in PATH: {obabel_binary}")
+    if shutil.which(mk_prepare_receptor_binary) is None:
+        raise RuntimeError(f"Meeko receptor executable not found in PATH: {mk_prepare_receptor_binary}")
 
     if output_path is None:
         output_path = receptor_pdb.with_suffix(".pdbqt")
@@ -568,27 +569,20 @@ def convert_receptor_pdb_to_pdbqt(
     output_path = Path(output_path).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    log_path = output_path.with_suffix(".obabel.log")
+    output_base = output_path.with_suffix("")
+    log_path = output_path.with_suffix(".meeko_receptor.log")
 
     cmd = [
-        obabel_binary,
+        mk_prepare_receptor_binary,
+        "-i",
         str(receptor_pdb),
-        "-O",
-        str(output_path),
-        "-xr",
+        "-o",
+        str(output_base),
+        "-p",
     ]
 
-    if preserve_atom_names:
-        cmd.append("-xn")
-
-    if preserve_atom_indices:
-        cmd.append("-xp")
-
-    if preserve_hydrogens:
-        cmd.append("-xh")
-
     LOGGER.info(
-        "Converting receptor with Open Babel: %s -> %s",
+        "Preparing receptor with Meeko: %s -> %s",
         receptor_pdb.name,
         output_path.name,
     )
@@ -604,12 +598,12 @@ def convert_receptor_pdb_to_pdbqt(
         log_path,
         process,
         command=cmd,
-        title=f"Open Babel receptor conversion log for {receptor_pdb.name}",
+        title=f"Meeko receptor preparation log for {receptor_pdb.name}",
     )
 
     if process.returncode != 0:
         raise RuntimeError(
-            "Open Babel receptor conversion failed.\n"
+            "Meeko receptor preparation failed.\n"
             f"Receptor: {receptor_pdb}\n"
             f"Log: {log_path}\n"
             f"stderr summary: {_summarize_stderr(process.stderr)}"
@@ -617,18 +611,16 @@ def convert_receptor_pdb_to_pdbqt(
 
     if not output_path.exists():
         raise RuntimeError(
-            "Open Babel reported success but receptor PDBQT output is missing.\n"
-            f"Expected: {output_path}\n"
-            f"Log: {log_path}"
+            f"Meeko reported success but receptor PDBQT output is missing.\nExpected: {output_path}\nLog: {log_path}"
         )
 
     if process.stderr.strip():
         LOGGER.warning(
-            "Open Babel finished with warnings; full details in %s",
+            "Meeko receptor preparation finished with warnings; full details in %s",
             log_path.name,
         )
     else:
-        LOGGER.info("Open Babel finished successfully; log written to %s", log_path.name)
+        LOGGER.info("Meeko receptor PDBQT written: %s", output_path.name)
 
     return output_path
 
@@ -725,25 +717,28 @@ class VinaEngine:
     def __init__(
         self,
         binary: str = "vina",
-        obabel_binary: str = "obabel",
+        mk_prepare_receptor_binary: str = "mk_prepare_receptor.py",
     ) -> None:
-        """Initialize executable names for Vina and Open Babel.
+        """Initialize executable names for Vina and Meeko receptor preparation.
 
         The binary names are configurable because development and CI environments
         often expose the tools under different names or wrappers.
-        Both parameters are required to keep receptor conversion and docking
+        Both parameters are required to keep receptor preparation and docking
         execution under the same engine object without hard-coding global paths.
         We are currently checking only whether the executables appear in PATH and
-        leaving actual runtime validity to the conversion and docking calls.
+        leaving actual runtime validity to the receptor-preparation and docking calls.
         """
         if shutil.which(binary) is None:
             LOGGER.warning("Vina binary not found in PATH: %s", binary)
 
-        if shutil.which(obabel_binary) is None:
-            LOGGER.warning("Open Babel binary not found in PATH: %s", obabel_binary)
+        if shutil.which(mk_prepare_receptor_binary) is None:
+            LOGGER.warning(
+                "Meeko receptor preparation binary not found in PATH: %s",
+                mk_prepare_receptor_binary,
+            )
 
         self.binary = binary
-        self.obabel_binary = obabel_binary
+        self.mk_prepare_receptor_binary = mk_prepare_receptor_binary
 
     def _build_command(
         self,
@@ -822,9 +817,9 @@ class VinaEngine:
         This helper exists so the engine can accept either a preprepared PDBQT
         receptor or a plain PDB receptor that still needs conversion.
         The `receptor` parameter is the user-provided input, while `workdir` is
-        required because on-the-fly receptor conversion needs a destination path.
+        required because on-the-fly receptor preparation needs a destination path.
         We are currently checking only file-type routing here: use PDBQT as-is,
-        convert PDB via Open Babel, and reject anything else explicitly.
+        prepare PDB via Meeko, and reject anything else explicitly.
         """
         receptor = Path(receptor).resolve()
 
@@ -835,7 +830,7 @@ class VinaEngine:
             return convert_receptor_pdb_to_pdbqt(
                 receptor,
                 output_path=workdir / f"{receptor.stem}.pdbqt",
-                obabel_binary=self.obabel_binary,
+                mk_prepare_receptor_binary=self.mk_prepare_receptor_binary,
             )
 
         raise ValueError(f"Unsupported receptor file type for docking: {receptor}")
