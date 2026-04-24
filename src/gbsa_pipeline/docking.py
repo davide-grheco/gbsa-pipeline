@@ -644,12 +644,9 @@ def prepare_ligand_with_meeko(
     rest of the module can assume prepared PDBQT ligand inputs when needed.
     The `ligand` parameter accepts either a SMILES string or an RDKit molecule
     because those are the two explicit input types chosen for this minimal API.
-    We are currently checking that SMILES inputs are embedded and optimized into
-    3D, while RDKit molecules already carry at least one conformer and only need
-    naming normalization plus Meeko conversion.
-
-    Reference:
-    https://meeko.readthedocs.io/
+    Meeko expects an RDKit molecule with explicit hydrogens and 3D coordinates,
+    so this function prepares those prerequisites before calling the current
+    documented Meeko Python API.
     """
     output_path = Path(output_path).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -689,11 +686,13 @@ def prepare_ligand_with_meeko(
         elif not mol.HasProp("_Name"):
             mol.SetProp("_Name", "LIG")
 
+        mol = Chem.AddHs(mol, addCoords=True)
+
     else:
         raise TypeError("prepare_ligand_with_meeko supports only SMILES strings and RDKit Chem.Mol objects.")
 
-    prep = MoleculePreparation()
-    mol_setups = prep.prepare(mol)
+    preparator = MoleculePreparation()
+    mol_setups = preparator(mol)
 
     if not mol_setups:
         raise RuntimeError("Meeko produced no molecule setups.")
