@@ -92,6 +92,7 @@ python = ">=3.12.13,<3.13"
 biopython = ">=1.86,<2"
 pandas = ">=2.3.3,<3"
 vina = ">=1.2.6,<2"
+gemmi = ">=0.6.7,<0.7"
 
 [tool.pixi.pypi-dependencies]
 gbsa-pipeline = { path = ".", editable = true }
