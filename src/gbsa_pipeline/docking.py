@@ -544,10 +544,10 @@ def convert_receptor_pdb_to_pdbqt(
     The `mk_prepare_receptor_binary` parameter is configurable because different
     environments may expose Meeko command-line tools through wrappers or explicit
     executable names.
-    We currently assume the receptor PDB has already been prepared upstream,
-    including hydrogen addition and protonation-state decisions, because Meeko
-    receptor preparation writes the docking representation but should not be
-    treated as a full receptor-cleaning pipeline.
+    We currently use Meeko's `--read_pdb` path for plain PDB input so this helper
+    does not require ProDy for the simple rigid-receptor workflow tested here.
+    Receptor hydrogen addition, protonation-state decisions, and structural
+    cleanup are still expected to happen upstream.
     """
     receptor_pdb = Path(receptor_pdb).resolve()
 
@@ -574,7 +574,7 @@ def convert_receptor_pdb_to_pdbqt(
 
     cmd = [
         mk_prepare_receptor_binary,
-        "-i",
+        "--read_pdb",
         str(receptor_pdb),
         "-o",
         str(output_base),
