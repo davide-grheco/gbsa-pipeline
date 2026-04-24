@@ -1,5 +1,3 @@
-# /home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/docking.py
-
 """Docking helpers for preparing ligands and running AutoDock Vina.
 
 This module is intentionally small and centered on one workflow: take a ligand
@@ -15,7 +13,6 @@ from __future__ import annotations
 
 import logging
 import math
-import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -366,6 +363,12 @@ def _extract_pdbqt_string_from_meeko_result(result: Any) -> str:
     raise TypeError(f"Unexpected return type from Meeko write_string(): {type(result).__name__}")
 
 
+VINA_SCORE_COLUMN_COUNT = 2
+VINA_RANK_COLUMN_INDEX = 0
+VINA_SCORE_COLUMN_INDEX = 1
+VINA_TOP_RANK = "1"
+
+
 def _parse_vina_best_score_from_log(log_path: Path) -> float | None:
     """Parse the best affinity from the written Vina log file.
 
@@ -388,10 +391,18 @@ def _parse_vina_best_score_from_log(log_path: Path) -> float | None:
     log_text = resolved_log_path.read_text(encoding="utf-8")
 
     for line in log_text.splitlines():
-        stripped = line.strip()
-        match = re.match(r"^1\s+(-?\d+(?:\.\d+)?)\s+", stripped)
-        if match:
-            return float(match.group(1))
+        columns = line.strip().split()
+
+        if len(columns) < VINA_SCORE_COLUMN_COUNT:
+            continue
+
+        if columns[VINA_RANK_COLUMN_INDEX] != VINA_TOP_RANK:
+            continue
+
+        try:
+            return float(columns[VINA_SCORE_COLUMN_INDEX])
+        except ValueError:
+            continue
 
     return None
 
