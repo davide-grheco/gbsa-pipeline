@@ -248,12 +248,18 @@ def molecule_centroid(
     summary without introducing a separate alignment step.
     The `molecule` parameter provides the coordinates, while `conf_id` allows
     callers to select a specific conformer when needed.
-    We delegate the actual centroid calculation to RDKit so hydrogen handling
-    and conformer access follow the toolkit implementation instead of local
-    coordinate-loop code.
+    We validate the requested conformer before computing the centroid so callers
+    get a clear error when they ask for a conformer that is not present.
     """
-    if molecule.GetNumConformers() == 0:
+    conformer_ids = {conformer.GetId() for conformer in molecule.GetConformers()}
+
+    if not conformer_ids:
         raise ValueError("Molecule has no conformer.")
+
+    if conf_id != -1 and conf_id not in conformer_ids:
+        raise ValueError(
+            f"Requested conformer id {conf_id} is not present. Available conformer ids: {sorted(conformer_ids)}"
+        )
 
     center = rdMolTransforms.ComputeCentroid(
         molecule.GetConformer(conf_id),
