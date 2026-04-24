@@ -1,3 +1,5 @@
+# /home/grheco/repositorios/gbsa-pipeline/tests/integration_tests/docking_integration_test.py
+
 """Integration tests for the lightweight docking adapter layer.
 
 This module keeps only integration-level checks.
@@ -23,7 +25,6 @@ from gbsa_pipeline.docking import (
     export_pdbqt_to_sdf,
     load_first_sdf_molecule,
     molecule_centroid,
-    point_distance,
     prepare_ligand_with_meeko,
     remove_hydrogens_copy,
 )
@@ -336,7 +337,7 @@ def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_dr
 
     raw_centroid = molecule_centroid(raw_heavy)
     rebuilt_centroid = molecule_centroid(rebuilt_heavy)
-    centroid_shift = point_distance(raw_centroid, rebuilt_centroid)
+    centroid_shift = raw_centroid.Distance(rebuilt_centroid)
 
     raw_to_rebuilt_rmsd = rdMolAlign.CalcRMS(rebuilt_heavy, raw_heavy)
 
@@ -510,7 +511,7 @@ def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position
 
     raw_centroid = molecule_centroid(raw_docked_heavy)
     rebuilt_centroid = molecule_centroid(rebuilt_docked_heavy)
-    centroid_shift = point_distance(raw_centroid, rebuilt_centroid)
+    centroid_shift = raw_centroid.Distance(rebuilt_centroid)
 
     raw_to_rebuilt_rmsd = rdMolAlign.CalcRMS(
         rebuilt_docked_heavy,

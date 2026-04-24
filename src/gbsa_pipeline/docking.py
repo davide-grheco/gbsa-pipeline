@@ -1,3 +1,5 @@
+# /home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/docking.py
+
 """Docking helpers for preparing ligands and running AutoDock Vina.
 
 This module is intentionally small and centered on one workflow: take a ligand
@@ -12,7 +14,6 @@ ligand redocking or box-derivation logic that belongs to a different workflow.
 from __future__ import annotations
 
 import logging
-import math
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,12 +26,20 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops, rdMolTransforms
 from rdkit.Chem.rdDistGeom import EmbedMolecule
 from rdkit.Chem.rdForceFieldHelpers import UFFOptimizeMolecule
+from rdkit.Geometry.rdGeometry import Point3D
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from rdkit.Geometry.rdGeometry import Point3D
+
 
 LOGGER = logging.getLogger(__name__)
+
+VINA_SCORE_COLUMN_COUNT = 2
+VINA_RANK_COLUMN_INDEX = 0
+VINA_SCORE_COLUMN_INDEX = 1
+VINA_TOP_RANK = "1"
 
 
 class DockingBox(BaseModel):
@@ -241,7 +250,7 @@ def molecule_centroid(
     *,
     conf_id: int = -1,
     ignore_hs: bool = False,
-) -> tuple[float, float, float]:
+) -> Point3D:
     """Compute the geometric centroid of one molecular conformer.
 
     This helper exists because pose-comparison tests need a compact spatial
@@ -261,26 +270,10 @@ def molecule_centroid(
             f"Requested conformer id {conf_id} is not present. Available conformer ids: {sorted(conformer_ids)}"
         )
 
-    center = rdMolTransforms.ComputeCentroid(
+    return rdMolTransforms.ComputeCentroid(
         molecule.GetConformer(conf_id),
         ignoreHs=ignore_hs,
     )
-
-    return (float(center.x), float(center.y), float(center.z))
-
-
-def point_distance(
-    left: tuple[float, float, float],
-    right: tuple[float, float, float],
-) -> float:
-    """Return Euclidean distance between two 3D points.
-
-    This helper exists so coarse pose-shift checks can stay readable and avoid
-    repeating the same distance expression at multiple call sites.
-    We rely on Python's standard library implementation instead of a local
-    formula to keep the code concise and avoid unnecessary dependencies.
-    """
-    return math.dist(left, right)
 
 
 def _summarize_stderr(stderr: str, max_lines: int = 4) -> str:
@@ -367,12 +360,6 @@ def _extract_pdbqt_string_from_meeko_result(result: Any) -> str:
         return pdbqt_string
 
     raise TypeError(f"Unexpected return type from Meeko write_string(): {type(result).__name__}")
-
-
-VINA_SCORE_COLUMN_COUNT = 2
-VINA_RANK_COLUMN_INDEX = 0
-VINA_SCORE_COLUMN_INDEX = 1
-VINA_TOP_RANK = "1"
 
 
 def _parse_vina_best_score_from_log(log_path: Path) -> float | None:
