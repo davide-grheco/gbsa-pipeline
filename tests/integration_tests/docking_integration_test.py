@@ -21,6 +21,7 @@ from gbsa_pipeline.docking import (
     DockingBox,
     DockingRequest,
     VinaEngine,
+    convert_receptor_pdb_to_pdbqt,
     export_pdbqt_to_sdf,
     load_first_sdf_molecule,
     molecule_centroid,
@@ -38,13 +39,15 @@ DOCKING_TESTDATA = TESTDATA / "docking"
 DOCKLIGAND_SDF = DOCKING_TESTDATA / "dockligand.sdf"
 DOCKPROTEIN_PDB = DOCKING_TESTDATA / "dockprotein.pdb"
 
+MEEKO_RECEPTOR_BINARY = "mk_prepare_receptor.py"
+
 DOCKPROTEIN_BOX = DockingBox(
     center=(10.115, 39.148, 53.112),
     size=(10.0, 10.0, 10.0),
 )
 
 
-def _assert_basic_pdbqt_content(path: Path) -> None:
+def _assert_basic_ligand_pdbqt_content(path: Path) -> None:
     """Check that a prepared ligand file contains basic PDBQT sections.
 
     This helper exists because Meeko output details can vary slightly between
@@ -60,6 +63,22 @@ def _assert_basic_pdbqt_content(path: Path) -> None:
 
     assert "ROOT" in content
     assert "ENDROOT" in content
+    assert "ATOM" in content or "HETATM" in content
+
+
+def _assert_basic_receptor_pdbqt_content(path: Path) -> None:
+    """Check that a prepared receptor file contains basic PDBQT content.
+
+    This helper is intentionally separate from ligand PDBQT checks because
+    receptor PDBQT files do not necessarily contain ROOT and ENDROOT sections.
+    The `path` parameter points to the receptor file produced by Meeko's receptor
+    preparation command, so the test verifies the actual file consumed by Vina.
+    We currently check only for a file with atom-like records because detailed
+    receptor chemistry policy belongs to upstream receptor preparation, not this
+    docking adapter test.
+    """
+    content = Path(path).read_text(encoding="utf-8")
+
     assert "ATOM" in content or "HETATM" in content
 
 
@@ -108,7 +127,7 @@ def test_meeko_smiles_to_pdbqt(tmp_path: Path) -> None:
 
     assert path == output
     assert output.exists()
-    _assert_basic_pdbqt_content(output)
+    _assert_basic_ligand_pdbqt_content(output)
 
 
 def test_meeko_rdkit_mol_to_pdbqt(tmp_path: Path) -> None:
@@ -133,7 +152,38 @@ def test_meeko_rdkit_mol_to_pdbqt(tmp_path: Path) -> None:
 
     assert path == output
     assert output.exists()
-    _assert_basic_pdbqt_content(output)
+    _assert_basic_ligand_pdbqt_content(output)
+
+
+@pytest.mark.integration
+def test_meeko_receptor_pdb_to_pdbqt(tmp_path: Path) -> None:
+    """Check that a receptor PDB can be prepared to receptor PDBQT with Meeko.
+
+    This test protects the receptor-preparation path used by the Vina adapter
+    when a request provides a PDB receptor instead of a prebuilt PDBQT receptor.
+    The `tmp_path` parameter is required because Meeko writes runtime artifacts
+    and the test should not modify repository fixtures.
+    We currently check only that Meeko runs through the public helper and writes
+    a basic receptor PDBQT file, because receptor protonation and cleanup are
+    expected to happen upstream.
+    """
+    if shutil.which(MEEKO_RECEPTOR_BINARY) is None:
+        pytest.skip(f"{MEEKO_RECEPTOR_BINARY} not available in PATH")
+
+    if not DOCKPROTEIN_PDB.exists():
+        pytest.skip(f"missing receptor test file: {DOCKPROTEIN_PDB}")
+
+    output = tmp_path / "dockprotein.pdbqt"
+
+    path = convert_receptor_pdb_to_pdbqt(
+        DOCKPROTEIN_PDB,
+        output_path=output,
+        mk_prepare_receptor_binary=MEEKO_RECEPTOR_BINARY,
+    )
+
+    assert path == output
+    assert output.exists()
+    _assert_basic_receptor_pdbqt_content(output)
 
 
 def test_vina_build_command(tmp_path: Path) -> None:
@@ -211,7 +261,7 @@ def test_pdbqt_to_sdf_roundtrip_preserves_pose(tmp_path: Path) -> None:
 
     assert roundtrip_pdbqt.exists()
     assert roundtrip_raw_sdf.exists()
-    _assert_basic_pdbqt_content(roundtrip_pdbqt)
+    _assert_basic_ligand_pdbqt_content(roundtrip_pdbqt)
 
     exported_molecule = load_first_sdf_molecule(roundtrip_raw_sdf)
 
@@ -256,7 +306,7 @@ def test_pdbqt_to_sdf_template_reconstruction_restores_chemistry_without_pose_dr
     template_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF, remove_hs=False)
 
     prepare_ligand_with_meeko(template_molecule, roundtrip_pdbqt, name="DOCKLIG")
-    _assert_basic_pdbqt_content(roundtrip_pdbqt)
+    _assert_basic_ligand_pdbqt_content(roundtrip_pdbqt)
 
     raw_export_path = export_pdbqt_to_sdf(
         roundtrip_pdbqt,
@@ -315,8 +365,9 @@ def test_vina_binary_smoke(tmp_path: Path) -> None:
     scientific validation of the docking setup or box choice.
     The outputs are written into `tmp_path` so the integration test remains
     self-contained and does not modify repository fixtures.
-    We are currently checking only that the adapter can prepare input, call
-    Vina, and produce one readable pose file with a parsed score.
+    We are currently checking only that the adapter can prepare input, prepare
+    the receptor with Meeko, call Vina, and produce one readable pose file with
+    a parsed score.
 
     Reference:
     The Vina basic workflow requires a receptor, ligand, box center, and box
@@ -325,6 +376,9 @@ def test_vina_binary_smoke(tmp_path: Path) -> None:
     """
     if shutil.which("vina") is None:
         pytest.skip("vina not available in PATH")
+
+    if shutil.which(MEEKO_RECEPTOR_BINARY) is None:
+        pytest.skip(f"{MEEKO_RECEPTOR_BINARY} not available in PATH")
 
     if not DOCKPROTEIN_PDB.exists():
         pytest.skip(f"missing receptor test file: {DOCKPROTEIN_PDB}")
@@ -335,14 +389,17 @@ def test_vina_binary_smoke(tmp_path: Path) -> None:
     docking_input_pdbqt = tmp_path / "dockligand_for_docking.pdbqt"
     docking_output_pdbqt = tmp_path / "dockligand_for_docking_vina_out.pdbqt"
 
-    engine = VinaEngine(binary="vina")
+    engine = VinaEngine(
+        binary="vina",
+        mk_prepare_receptor_binary=MEEKO_RECEPTOR_BINARY,
+    )
 
     prepare_ligand_with_meeko(
         load_first_sdf_molecule(DOCKLIGAND_SDF, remove_hs=False),
         docking_input_pdbqt,
         name="DOCKLIG",
     )
-    _assert_basic_pdbqt_content(docking_input_pdbqt)
+    _assert_basic_ligand_pdbqt_content(docking_input_pdbqt)
 
     request = DockingRequest(
         receptor=DOCKPROTEIN_PDB,
@@ -383,6 +440,9 @@ def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position
     if shutil.which("vina") is None:
         pytest.skip("vina not available in PATH")
 
+    if shutil.which(MEEKO_RECEPTOR_BINARY) is None:
+        pytest.skip(f"{MEEKO_RECEPTOR_BINARY} not available in PATH")
+
     if not DOCKPROTEIN_PDB.exists():
         pytest.skip(f"missing receptor test file: {DOCKPROTEIN_PDB}")
 
@@ -401,9 +461,12 @@ def test_docked_pose_reconstruction_restores_chemistry_and_keeps_docked_position
         docking_input_pdbqt,
         name="DOCKLIG",
     )
-    _assert_basic_pdbqt_content(docking_input_pdbqt)
+    _assert_basic_ligand_pdbqt_content(docking_input_pdbqt)
 
-    engine = VinaEngine(binary="vina")
+    engine = VinaEngine(
+        binary="vina",
+        mk_prepare_receptor_binary=MEEKO_RECEPTOR_BINARY,
+    )
     request = DockingRequest(
         receptor=DOCKPROTEIN_PDB,
         ligands=[docking_input_pdbqt],
