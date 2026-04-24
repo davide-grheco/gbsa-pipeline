@@ -1,5 +1,3 @@
-# /home/grheco/repositorios/gbsa-pipeline/src/gbsa_pipeline/docking.py
-
 """Docking helpers for preparing ligands and running AutoDock Vina.
 
 This module is intentionally small and centered on one workflow: take a ligand

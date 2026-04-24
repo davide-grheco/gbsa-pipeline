@@ -1,5 +1,3 @@
-# /home/grheco/repositorios/gbsa-pipeline/tests/integration_tests/docking_integration_test.py
-
 """Integration tests for the lightweight docking adapter layer.
 
 This module keeps only integration-level checks.
