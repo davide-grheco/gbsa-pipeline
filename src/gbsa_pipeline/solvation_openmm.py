@@ -1,3 +1,5 @@
+# src/gbsa_pipeline/solvation_openmm.py
+
 """OpenMM/ParmEd solvation that bypasses BioSimSpace IO."""
 
 from __future__ import annotations
@@ -9,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 import parmed as pmd
 from openmm import Vec3
 from openmm import unit as mm_unit
-from openmm.app import ForceField, Modeller, NoCutoff
+from openmm.app import ForceField, Modeller, NoCutoff, PDBFile
 
 from gbsa_pipeline.solvation_box import BoxShape, SolvationParams, WaterModel
 
@@ -43,20 +45,13 @@ _WATER_NAME: dict[WaterModel, str] = {
 class SolvatedComplex:
     """Solvated protein-ligand complex produced by :func:`solvate_openmm`.
 
-    Carries both the on-disk GROMACS files (written for inspection and
-    checkpoint purposes) and the in-memory ParmEd structure so that
-    downstream steps can use either without repeating disk I/O.
-
-    Attributes:
-    ----------
-    gro_file:
-        GROMACS coordinate file (``.gro``) of the solvated system.
-    top_file:
-        GROMACS topology file (``.top``) of the solvated system.
-    parmed_structure:
-        In-memory ParmEd ``Structure`` with all force-field parameters.
-        ``None`` when the object is constructed from existing files rather
-        than from a live parametrization run.
+    Carries both the on-disk GROMACS files written for inspection/checkpointing
+    and the in-memory ParmEd structure so downstream stages can use either path
+    without repeating disk I/O. The object is intentionally small because MD
+    orchestration belongs in a later pipeline layer, not in this solvation
+    helper. The optional in-memory structure is useful when the caller continues
+    in Python immediately, while the files remain the stable interface for
+    BioSimSpace loading and visual inspection.
     """
 
     gro_file: Path
@@ -66,16 +61,15 @@ class SolvatedComplex:
     def load_bss(self) -> Any:
         """Load this complex as a BioSimSpace System for MD stages.
 
-        Reads from the GROMACS files already written to disk.  The returned
-        system is ready for minimization, equilibration, and production MD.
-
-        Returns:
-        -------
-        BioSimSpace._SireWrappers.System
-            The solvated system loaded into BioSimSpace.
+        Reads from the GROMACS files already written to disk. The returned
+        system is ready for later minimization, equilibration, and production MD
+        helpers. This method intentionally performs only loading and does not
+        start any simulation stage. Missing files are reported explicitly because
+        this object is often used after long integration-test runs.
         """
         if not self.gro_file.exists() or not self.top_file.exists():
             raise FileNotFoundError(f"SolvatedComplex files not found: {self.gro_file}, {self.top_file}.")
+
         import BioSimSpace as BSS  # noqa: PLC0415
 
         return BSS.IO.readMolecules([str(self.gro_file), str(self.top_file)])
@@ -87,38 +81,16 @@ def solvate_openmm(
     output_gro: Path,
     output_top: Path,
 ) -> SolvatedComplex:
-    """Solvate a parametrised complex with OpenMM + ParmEd (no BSS IO).
+    """Solvate a parametrised complex with OpenMM + ParmEd.
 
     Reuses the ``ForceField`` and ParmEd ``Structure`` carried by
-    *parametrized* — built in the parametrization stage — so that AM1-BCC
-    charge assignment is not repeated.  Writes GROMACS ``.gro`` and ``.top``
-    files and returns a :class:`SolvatedComplex` that carries both the file
-    paths and the in-memory ParmEd structure.
-
-    Parameters
-    ----------
-    parametrized:
-        Output of :func:`~gbsa_pipeline.parametrization.parametrize`.
-        Must carry ``forcefield`` and ``parmed_structure`` (populated by the
-        OpenMM parametrization path).
-    params:
-        Solvation settings (water model, box shape/size, ion concentration).
-    output_gro:
-        Destination path for the solvated GROMACS coordinate file.
-    output_top:
-        Destination path for the solvated GROMACS topology file.
-
-    Returns:
-    -------
-    SolvatedComplex
-        Dataclass holding the written file paths and the in-memory ParmEd
-        structure of the solvated system.
-
-    Raises:
-    ------
-    ValueError
-        If *parametrized* was not produced by the OpenMM parametrization path
-        (i.e. ``forcefield`` or ``parmed_structure`` is ``None``).
+    *parametrized*, so ligand charges and protein-ligand parameters are not
+    regenerated. If parametrization extracted crystallographic waters, those
+    waters are restored into the OpenMM modeller before bulk solvent is added.
+    This makes retained waters part of the pre-solvation system, so newly
+    generated solvent is placed around protein, ligand, and crystal waters
+    together. The function writes GROMACS ``.gro`` and ``.top`` files and
+    returns a small object carrying the paths and in-memory ParmEd structure.
     """
     if parametrized.forcefield is None or parametrized.parmed_structure is None:
         raise ValueError(
@@ -129,16 +101,13 @@ def solvate_openmm(
 
     output_gro.parent.mkdir(parents=True, exist_ok=True)
 
-    water_model = (
-        WaterModel(str(params.water_model).lower())
-        if not isinstance(params.water_model, WaterModel)
-        else params.water_model
-    )
-    box_shape = BoxShape(str(params.shape).lower()) if not isinstance(params.shape, BoxShape) else params.shape
+    water_model = _coerce_water_model(params.water_model)
+    box_shape = _coerce_box_shape(params.shape)
 
     # ------------------------------------------------------------------
-    # 1. Reuse the in-memory ParmEd structure from parametrization
-    #    (all protein+ligand force field parameters already assigned)
+    # 1. Reuse the in-memory ParmEd structure from parametrization.
+    #    This is the dry protein-ligand complex, with all non-water
+    #    protein and ligand parameters already assigned.
     # ------------------------------------------------------------------
     existing: Any = parametrized.parmed_structure
     n_orig = len(existing.atoms)
@@ -155,12 +124,25 @@ def solvate_openmm(
     ff.loadFile(water_xml)
 
     # ------------------------------------------------------------------
-    # 3. Add solvent (water + ions) via OpenMM Modeller.
-    #    Full ForceField ensures correct clash detection for all residues.
+    # 3. Build a complete pre-solvation modeller.
+    #    Crystal waters are restored before addSolvent so the bulk solvent
+    #    placement sees them as existing atoms and avoids overlaps.
     # ------------------------------------------------------------------
     logger.debug("Creating Modeller from existing topology …")
     modeller = Modeller(existing.topology, existing.positions)
 
+    restored_waters_pdb = _restore_crystal_waters_before_solvation(
+        modeller=modeller,
+        forcefield=ff,
+        crystal_waters_pdb=parametrized.crystal_waters_pdb,
+        output_pdb=output_gro.parent / "restored_crystal_waters.pdb",
+    )
+    if restored_waters_pdb is not None:
+        logger.debug("Restored crystallographic waters from %s.", restored_waters_pdb)
+
+    # ------------------------------------------------------------------
+    # 4. Add bulk solvent and ions via OpenMM Modeller.
+    # ------------------------------------------------------------------
     kwargs: dict[str, Any] = {
         "model": _WATER_NAME[water_model],
         "neutralize": params.neutralize,
@@ -184,17 +166,22 @@ def solvate_openmm(
     logger.debug("Solvated topology: %d atoms.", modeller.topology.getNumAtoms())
 
     # ------------------------------------------------------------------
-    # 4. Build full OpenMM system → ParmEd structure.
+    # 5. Build full OpenMM system → ParmEd structure.
     #    rigidWater=False keeps O-H bonds in HarmonicBondForce so ParmEd
-    #    can resolve SETTLE geometry when writing GROMACS topology.
+    #    can resolve water geometry when writing the GROMACS topology.
     # ------------------------------------------------------------------
     logger.debug("Creating solvated OpenMM system …")
-    system = ff.createSystem(modeller.topology, nonbondedMethod=NoCutoff, constraints=None, rigidWater=False)
+    system = ff.createSystem(
+        modeller.topology,
+        nonbondedMethod=NoCutoff,
+        constraints=None,
+        rigidWater=False,
+    )
     logger.debug("Converting to ParmEd structure …")
     structure = pmd.openmm.load_topology(modeller.topology, system, modeller.positions)
 
     # ------------------------------------------------------------------
-    # 5. Write GROMACS gro + top
+    # 6. Write GROMACS gro + top.
     # ------------------------------------------------------------------
     logger.debug("Writing GROMACS topology → %s …", output_top)
     structure.save(str(output_top), format="gromacs", overwrite=True)
@@ -207,3 +194,103 @@ def solvate_openmm(
         top_file=output_top,
         parmed_structure=structure,
     )
+
+
+def _restore_crystal_waters_before_solvation(
+    *,
+    modeller: Modeller,
+    forcefield: ForceField,
+    crystal_waters_pdb: Path | None,
+    output_pdb: Path,
+) -> Path | None:
+    """Restore extracted crystallographic waters before bulk solvation.
+
+    The parametrization stage stores crystal waters separately because the
+    protein-ligand system is parameterized dry. This helper uses OpenMM's own
+    ``Modeller`` machinery to add missing hydrogens to those waters, writes a
+    small inspection PDB, and adds the completed waters to the pre-solvation
+    modeller before ``addSolvent`` is called. The added waters therefore become
+    part of the pre-solvation system and are included in clash avoidance when
+    bulk water is placed. ``None`` is returned when no retained-water file is
+    available.
+    """
+    if crystal_waters_pdb is None:
+        _remove_stale_file(output_pdb)
+        return None
+
+    if not crystal_waters_pdb.exists():
+        _remove_stale_file(output_pdb)
+        logger.debug("Crystal water file not found: %s.", crystal_waters_pdb)
+        return None
+
+    water_pdb = PDBFile(str(crystal_waters_pdb))
+    water_modeller = Modeller(water_pdb.topology, water_pdb.positions)
+
+    atoms_before = water_modeller.topology.getNumAtoms()
+    water_modeller.addHydrogens(forcefield)
+    atoms_after = water_modeller.topology.getNumAtoms()
+
+    output_pdb.parent.mkdir(parents=True, exist_ok=True)
+    with output_pdb.open("w", encoding="utf-8") as handle:
+        PDBFile.writeFile(
+            water_modeller.topology,
+            water_modeller.positions,
+            handle,
+            keepIds=True,
+        )
+
+    modeller.add(water_modeller.topology, water_modeller.positions)
+
+    logger.debug(
+        "Restored crystal waters with OpenMM hydrogens (%d -> %d atoms).",
+        atoms_before,
+        atoms_after,
+    )
+    return output_pdb
+
+
+def _coerce_box_shape(shape: BoxShape | str) -> BoxShape:
+    """Return a validated box-shape enum.
+
+    ``SolvationParams`` normally validates this already, but this helper keeps
+    ``solvate_openmm`` robust for direct callers and tests that pass strings.
+    It intentionally mirrors the small coercion pattern used in
+    ``solvation_box.py`` instead of introducing a shared abstraction. Invalid
+    values should fail with the normal ``BoxShape`` error message.
+    """
+    if isinstance(shape, BoxShape):
+        return shape
+
+    return BoxShape(str(shape).lower().strip())
+
+
+def _coerce_water_model(model: WaterModel | str) -> WaterModel:
+    """Return a validated water-model enum.
+
+    ``SolvationParams`` normally validates this already, but keeping the
+    conversion local makes the OpenMM helper safe for direct use. The resulting
+    enum is used both to select the OpenMM XML file and to pass the model name
+    accepted by ``Modeller.addSolvent``. Unsupported values fail through the
+    ``WaterModel`` enum constructor. No model-specific chemistry is implemented
+    in this helper.
+    """
+    if isinstance(model, WaterModel):
+        return model
+
+    return WaterModel(str(model).lower().strip())
+
+
+def _remove_stale_file(path: Path) -> None:
+    """Remove a generated file if it exists.
+
+    Persistent integration-test directories can otherwise keep stale artefacts
+    from an earlier run, which makes visual inspection misleading. The helper is
+    intentionally small and silent because the absence of a generated water file
+    is valid when no crystal waters were retained. Only ``FileNotFoundError`` is
+    suppressed; other filesystem errors should still surface. This keeps stale
+    cleanup local to the generated restore artefact.
+    """
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return

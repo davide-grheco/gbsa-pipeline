@@ -66,19 +66,19 @@ def visual_run_dir(request: pytest.FixtureRequest) -> Path:
 
 
 @pytest.mark.integration
-def test_prepare_inputs_run_docking_parametrize_and_solvate_keeps_outputs(
+def test_prepare_inputs_run_docking_parametrize_solvate_and_load_bss_keeps_outputs(
     visual_run_dir: Path,
 ) -> None:
-    """Run docking, parametrize the docked complex, and solvate it.
+    """Run docking, parametrize the docked complex, solvate it, and load BioSimSpace.
 
     This test is a workflow smoke test, not a detailed unit test of the docking,
-    parametrization, or solvation modules. The ligand starts from SDF, the
-    receptor starts from PDB, and the docking output is exported back to SDF
-    before it is passed into the parametrization entry point. The parametrized
-    GROMACS coordinate and topology files are then passed into the OpenMM/ParmEd
-    solvation bridge. We currently check only that each bridge produces the
-    expected files and that solvation reaches the `solvated.gro` and
-    `solvated.top` outputs needed by the later MD step.
+    parametrization, solvation, or BioSimSpace MD modules. The ligand starts
+    from SDF, the receptor starts from PDB, and the docking output is exported
+    back to SDF before it is passed into the parametrization entry point. The
+    parametrized GROMACS coordinate and topology files are then passed into the
+    OpenMM/ParmEd solvation bridge, and the solvated files are loaded into
+    BioSimSpace. We currently check only that each bridge produces the expected
+    files and that the solvated system can be handed to the later MD helpers.
     """
     if shutil.which("vina") is None:
         pytest.skip("vina not available in PATH")
@@ -185,3 +185,7 @@ def test_prepare_inputs_run_docking_parametrize_and_solvate_keeps_outputs(
     assert solvated.top_file == solvation_dir / "solvated.top"
     assert solvated.gro_file.exists()
     assert solvated.top_file.exists()
+
+    bss_system = solvated.load_bss()
+
+    assert bss_system is not None
