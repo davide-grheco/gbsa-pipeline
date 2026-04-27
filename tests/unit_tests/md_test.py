@@ -1,134 +1,295 @@
-"""Small BioSimSpace MD protocol helpers for gbsa-pipeline.
+"""Unit tests for the small BioSimSpace MD helpers.
 
-This module currently contains the first isolated BioSimSpace building blocks
-for the MD stage. The helpers assume that the caller already provides a valid
-parametrized BioSimSpace/Sire system, because parametrization, solvation, file
-conversion, and workflow orchestration belong to later commits. Keeping these
-functions small makes the first MD protocol changes easy to review and easy to
-replace if the final combined MD stage needs a different internal structure.
-The functions use BioSimSpace protocol objects directly instead of manually
-writing GROMACS input files at this stage.
+These tests focus on the local behavior of the gbsa-pipeline MD helper
+functions and do not run external GROMACS processes. BioSimSpace process
+creation is mocked because the unit tests should verify that this module wires
+the protocol, system, and optional work directory correctly. Real process
+execution belongs in later integration tests once the complete MD workflow is
+available. This keeps the first MD helper tests small, fast, and aligned with
+the public functions that are being reviewed.
 """
 
-from __future__ import annotations
+from pathlib import Path
+from unittest.mock import Mock
 
-from typing import TYPE_CHECKING
+import pytest
 
-import BioSimSpace as BSS
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
-    import sire
+from gbsa_pipeline import md
 
 
-def run_minimization(
-    system: sire.System,
-    work_dir: Path | None = None,
-) -> sire.System:
-    """Run a BioSimSpace energy minimization.
+def test_run_minimization_builds_bss_process_and_returns_minimized_system(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Test that the minimization helper delegates to BioSimSpace correctly.
 
-    This helper is the first small MD-stage building block and only handles
-    minimization of an already prepared BioSimSpace/Sire system. The input
-    ``system`` is expected to be parametrized already, because this function
-    does not assign force-field parameters, solvate, neutralize, or prepare
-    topology files. The optional ``work_dir`` is passed to the BioSimSpace
-    GROMACS process so the generated intermediate files stay in a predictable
-    directory when the caller wants that. The function intentionally uses
-    BioSimSpace's standard ``Minimisation`` protocol rather than manually
-    writing GROMACS ``.mdp`` files, because this first step should stay close
-    to the BioSimSpace public API.
+    The helper should create a BioSimSpace ``Minimisation`` protocol and pass it
+    together with the input system to ``BSS.Process.Gromacs``. The optional
+    ``work_dir`` should be converted to a string because BioSimSpace process
+    constructors commonly expect file-system paths in that form. The test uses
+    mocks instead of a real Sire system because the unit-level contract is the
+    local wiring, not molecular dynamics execution. The returned object should
+    be exactly the system returned by ``getSystem(block=True)``.
     """
-    minimization_protocol = BSS.Protocol.Minimisation()
+    input_system = Mock(name="input_system")
+    minimized_system = Mock(name="minimized_system")
+    minimization_protocol = Mock(name="minimization_protocol")
+    process = Mock(name="gromacs_process")
+    process.getSystem.return_value = minimized_system
 
-    kwargs = {"work_dir": str(work_dir)} if work_dir else {}
-    minimization_process = BSS.Process.Gromacs(
+    minimisation_factory = Mock(return_value=minimization_protocol)
+    gromacs_factory = Mock(return_value=process)
+
+    monkeypatch.setattr(md.BSS.Protocol, "Minimisation", minimisation_factory)
+    monkeypatch.setattr(md.BSS.Process, "Gromacs", gromacs_factory)
+
+    result = md.run_minimization(
+        system=input_system,
+        work_dir=tmp_path,
+    )
+
+    minimisation_factory.assert_called_once_with()
+    gromacs_factory.assert_called_once_with(
         protocol=minimization_protocol,
-        system=system,
-        **kwargs,
+        system=input_system,
+        work_dir=str(tmp_path),
+    )
+    process.start.assert_called_once_with()
+    process.wait.assert_called_once_with()
+    process.getSystem.assert_called_once_with(block=True)
+    assert result is minimized_system
+
+
+def test_run_minimization_omits_work_dir_when_not_provided(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that the minimization helper does not invent a work directory.
+
+    The ``work_dir`` argument is optional because callers may prefer to let
+    BioSimSpace create and manage its own process directory. When no path is
+    provided, the helper should not pass ``work_dir=None`` explicitly because
+    that can differ from omitting the keyword for third-party APIs. The test
+    checks only this small branching behavior and reuses mocks to avoid any
+    dependency on external simulation tools. The returned minimized system is
+    still taken from ``getSystem(block=True)`` to keep the behavior identical to
+    the explicit-work-directory case.
+    """
+    input_system = Mock(name="input_system")
+    minimized_system = Mock(name="minimized_system")
+    minimization_protocol = Mock(name="minimization_protocol")
+    process = Mock(name="gromacs_process")
+    process.getSystem.return_value = minimized_system
+
+    minimisation_factory = Mock(return_value=minimization_protocol)
+    gromacs_factory = Mock(return_value=process)
+
+    monkeypatch.setattr(md.BSS.Protocol, "Minimisation", minimisation_factory)
+    monkeypatch.setattr(md.BSS.Process, "Gromacs", gromacs_factory)
+
+    result = md.run_minimization(system=input_system)
+
+    minimisation_factory.assert_called_once_with()
+    gromacs_factory.assert_called_once_with(
+        protocol=minimization_protocol,
+        system=input_system,
+    )
+    process.start.assert_called_once_with()
+    process.wait.assert_called_once_with()
+    process.getSystem.assert_called_once_with(block=True)
+    assert result is minimized_system
+
+
+def test_run_heating_builds_bss_process_and_returns_equilibrated_system(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Test that the heating helper delegates to BioSimSpace correctly.
+
+    The helper should create a BioSimSpace ``Equilibration`` protocol with the
+    requested runtime, a 0 K start temperature, a 300 K end temperature, and the
+    current conservative backbone restraint default. The optional ``work_dir``
+    should be converted to a string and passed only as a process keyword,
+    matching the minimization helper behavior. The test mocks BioSimSpace
+    because unit coverage should verify local protocol wiring, not run GROMACS.
+    The returned object should be exactly the system returned by
+    ``getSystem(block=True)``.
+    """
+    minimized_system = Mock(name="minimized_system")
+    equilibrated_system = Mock(name="equilibrated_system")
+    simulation_time = Mock(name="simulation_time")
+    heating_protocol = Mock(name="heating_protocol")
+    process = Mock(name="gromacs_process")
+    process.getSystem.return_value = equilibrated_system
+
+    equilibration_factory = Mock(return_value=heating_protocol)
+    gromacs_factory = Mock(return_value=process)
+
+    monkeypatch.setattr(md.BSS.Protocol, "Equilibration", equilibration_factory)
+    monkeypatch.setattr(md.BSS.Process, "Gromacs", gromacs_factory)
+
+    result = md.run_heating(
+        simulation_time=simulation_time,
+        minimized=minimized_system,
+        work_dir=tmp_path,
     )
 
-    minimization_process.start()
-    minimization_process.wait()
-
-    minimized = minimization_process.getSystem(block=True)
-
-    return minimized
-
-
-def run_heating(
-    simulation_time: BSS.Types.Time,
-    minimized: sire.System,
-    work_dir: Path | None = None,
-) -> sire.System:
-    """Run a BioSimSpace NVT heating procedure.
-
-    This helper creates a BioSimSpace equilibration protocol that heats an
-    already minimized system from 0 K to 300 K. The ``simulation_time`` argument
-    controls the runtime of the heating stage and is expected to be a
-    BioSimSpace time object, for example a value built with
-    ``BSS.Units.Time.picosecond``. The ``minimized`` system is assumed to be the
-    output of a previous minimization step, because this function does not check
-    energy convergence or repair unstable structures. Backbone restraints are
-    kept as the first conservative default, matching the current base protocol
-    before a later restraint-selection helper is added.
-    """
-    heating_protocol = BSS.Protocol.Equilibration(
+    equilibration_factory.assert_called_once_with(
         runtime=simulation_time,
-        temperature_start=0 * BSS.Units.Temperature.kelvin,
-        temperature_end=300 * BSS.Units.Temperature.kelvin,
+        temperature_start=0 * md.BSS.Units.Temperature.kelvin,
+        temperature_end=300 * md.BSS.Units.Temperature.kelvin,
         restraint="backbone",
     )
-
-    kwargs = {"work_dir": str(work_dir)} if work_dir else {}
-    heating_process = BSS.Process.Gromacs(
+    gromacs_factory.assert_called_once_with(
         protocol=heating_protocol,
-        system=minimized,
-        **kwargs,
+        system=minimized_system,
+        work_dir=str(tmp_path),
+    )
+    process.start.assert_called_once_with()
+    process.wait.assert_called_once_with()
+    process.getSystem.assert_called_once_with(block=True)
+    assert result is equilibrated_system
+
+
+def test_run_heating_omits_work_dir_when_not_provided(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that the heating helper does not invent a work directory.
+
+    The ``work_dir`` argument is optional for the same reason as in the
+    minimization helper: BioSimSpace can create its own process directory when
+    the caller does not need a specific location. The helper should omit the
+    keyword entirely instead of passing ``work_dir=None``. This test keeps the
+    assertion local to process construction and return behavior. It does not
+    validate physical heating behavior, which belongs in an integration test
+    with a real parametrized system and a working GROMACS installation.
+    """
+    minimized_system = Mock(name="minimized_system")
+    equilibrated_system = Mock(name="equilibrated_system")
+    simulation_time = Mock(name="simulation_time")
+    heating_protocol = Mock(name="heating_protocol")
+    process = Mock(name="gromacs_process")
+    process.getSystem.return_value = equilibrated_system
+
+    equilibration_factory = Mock(return_value=heating_protocol)
+    gromacs_factory = Mock(return_value=process)
+
+    monkeypatch.setattr(md.BSS.Protocol, "Equilibration", equilibration_factory)
+    monkeypatch.setattr(md.BSS.Process, "Gromacs", gromacs_factory)
+
+    result = md.run_heating(
+        simulation_time=simulation_time,
+        minimized=minimized_system,
     )
 
-    heating_process.start()
-    heating_process.wait()
-
-    equilibrated = heating_process.getSystem(block=True)
-
-    return equilibrated
-
-
-def run_npt_equilibration(
-    simulation_time: BSS.Types.Time,
-    heated: sire.System,
-    work_dir: Path | None = None,
-) -> sire.System:
-    """Run a BioSimSpace NPT equilibration procedure.
-
-    This helper creates a BioSimSpace equilibration protocol for an already
-    heated system at 300 K and 1 atm. The ``simulation_time`` argument controls
-    only the length of this equilibration stage and should be provided as a
-    BioSimSpace time object by the caller. The ``heated`` system is assumed to
-    be structurally stable enough to start pressure coupling, because this
-    function does not run minimization, diagnose LINCS problems, or inspect
-    density convergence. Backbone restraints remain enabled as the conservative
-    first default so this helper matches the early heating protocol before a
-    later configurable restraint helper is introduced.
-    """
-    equilibration_protocol = BSS.Protocol.Equilibration(
+    equilibration_factory.assert_called_once_with(
         runtime=simulation_time,
-        temperature=300 * BSS.Units.Temperature.kelvin,
-        pressure=1 * BSS.Units.Pressure.atm,
+        temperature_start=0 * md.BSS.Units.Temperature.kelvin,
+        temperature_end=300 * md.BSS.Units.Temperature.kelvin,
         restraint="backbone",
     )
+    gromacs_factory.assert_called_once_with(
+        protocol=heating_protocol,
+        system=minimized_system,
+    )
+    process.start.assert_called_once_with()
+    process.wait.assert_called_once_with()
+    process.getSystem.assert_called_once_with(block=True)
+    assert result is equilibrated_system
 
-    kwargs = {"work_dir": str(work_dir)} if work_dir else {}
-    equilibration_process = BSS.Process.Gromacs(
-        protocol=equilibration_protocol,
-        system=heated,
-        **kwargs,
+
+def test_run_npt_equilibration_builds_bss_process_and_returns_equilibrated_system(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Test that the NPT equilibration helper delegates to BioSimSpace correctly.
+
+    The helper should create a BioSimSpace ``Equilibration`` protocol with the
+    requested runtime, a 300 K target temperature, a 1 atm pressure target, and
+    the current conservative backbone restraint default. The optional
+    ``work_dir`` should be converted to a string and passed only as a process
+    keyword, matching the other MD helper behavior. The test mocks BioSimSpace
+    because unit coverage should verify local protocol wiring, not pressure
+    equilibration with a real GROMACS process. The returned object should be
+    exactly the system returned by ``getSystem(block=True)``.
+    """
+    heated_system = Mock(name="heated_system")
+    equilibrated_system = Mock(name="equilibrated_system")
+    simulation_time = Mock(name="simulation_time")
+    equilibration_protocol = Mock(name="equilibration_protocol")
+    process = Mock(name="gromacs_process")
+    process.getSystem.return_value = equilibrated_system
+
+    equilibration_factory = Mock(return_value=equilibration_protocol)
+    gromacs_factory = Mock(return_value=process)
+
+    monkeypatch.setattr(md.BSS.Protocol, "Equilibration", equilibration_factory)
+    monkeypatch.setattr(md.BSS.Process, "Gromacs", gromacs_factory)
+
+    result = md.run_npt_equilibration(
+        simulation_time=simulation_time,
+        heated=heated_system,
+        work_dir=tmp_path,
     )
 
-    equilibration_process.start()
-    equilibration_process.wait()
+    equilibration_factory.assert_called_once_with(
+        runtime=simulation_time,
+        temperature=300 * md.BSS.Units.Temperature.kelvin,
+        pressure=1 * md.BSS.Units.Pressure.atm,
+        restraint="backbone",
+    )
+    gromacs_factory.assert_called_once_with(
+        protocol=equilibration_protocol,
+        system=heated_system,
+        work_dir=str(tmp_path),
+    )
+    process.start.assert_called_once_with()
+    process.wait.assert_called_once_with()
+    process.getSystem.assert_called_once_with(block=True)
+    assert result is equilibrated_system
 
-    equilibrated = equilibration_process.getSystem(block=True)
 
-    return equilibrated
+def test_run_npt_equilibration_omits_work_dir_when_not_provided(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that the NPT equilibration helper does not invent a work directory.
+
+    The ``work_dir`` argument remains optional so the caller can either choose a
+    predictable process directory or let BioSimSpace create one. When no path is
+    provided, the helper should omit the keyword entirely instead of passing
+    ``work_dir=None``. This test checks only local process construction and
+    return behavior, keeping real NPT stability questions out of unit coverage.
+    A later integration test can cover the complete minimization, heating, and
+    pressure-equilibration sequence with a real parametrized test system.
+    """
+    heated_system = Mock(name="heated_system")
+    equilibrated_system = Mock(name="equilibrated_system")
+    simulation_time = Mock(name="simulation_time")
+    equilibration_protocol = Mock(name="equilibration_protocol")
+    process = Mock(name="gromacs_process")
+    process.getSystem.return_value = equilibrated_system
+
+    equilibration_factory = Mock(return_value=equilibration_protocol)
+    gromacs_factory = Mock(return_value=process)
+
+    monkeypatch.setattr(md.BSS.Protocol, "Equilibration", equilibration_factory)
+    monkeypatch.setattr(md.BSS.Process, "Gromacs", gromacs_factory)
+
+    result = md.run_npt_equilibration(
+        simulation_time=simulation_time,
+        heated=heated_system,
+    )
+
+    equilibration_factory.assert_called_once_with(
+        runtime=simulation_time,
+        temperature=300 * md.BSS.Units.Temperature.kelvin,
+        pressure=1 * md.BSS.Units.Pressure.atm,
+        restraint="backbone",
+    )
+    gromacs_factory.assert_called_once_with(
+        protocol=equilibration_protocol,
+        system=heated_system,
+    )
+    process.start.assert_called_once_with()
+    process.wait.assert_called_once_with()
+    process.getSystem.assert_called_once_with(block=True)
+    assert result is equilibrated_system
