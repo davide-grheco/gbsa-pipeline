@@ -50,12 +50,11 @@ DOCKPROTEIN_BOX = DockingBox(
     center=(10.115, 39.148, 53.112),
     size=(10.0, 10.0, 10.0),
 )
-
 SD_MINIMIZATION_PARAMS: dict[str, Any] = {
     "integrator": "steep",
-    "nsteps": 10000,
+    "nsteps": 50000,
     "emtol": 100.0,
-    "emstep": 0.01,
+    "emstep": 0.0001,
     "cutoff_scheme": "Verlet",
     "nstlist": 20,
     "pbc": "xyz",
