@@ -8,17 +8,21 @@ parametrized BioSimSpace/Sire system, because parametrization, solvation, file
 conversion, and workflow orchestration belong to later commits. Keeping these
 functions small makes the first MD protocol changes easy to review and easy to
 replace if the final combined MD stage needs a different internal structure.
-The functions use BioSimSpace protocol objects directly instead of manually
-writing GROMACS input files at this stage.
+The functions use BioSimSpace protocol objects directly by default, while
+``run_minimization`` can also use explicit GROMACS parameter blocks for the
+staged minimization workflow.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import BioSimSpace as BSS
 
+from gbsa_pipeline.change_defaults import GromacsParams, run_gro_custom
+
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
     import sire
@@ -27,20 +31,28 @@ if TYPE_CHECKING:
 def run_minimization(
     system: sire.System,
     work_dir: Path | None = None,
+    params: GromacsParams | Mapping[str, Any] | None = None,
 ) -> sire.System:
-    """Run a BioSimSpace energy minimization.
+    """Run a BioSimSpace/GROMACS energy minimization.
 
     This helper is the first small MD-stage building block and only handles
     minimization of an already prepared BioSimSpace/Sire system. The input
     ``system`` is expected to be parametrized already, because this function
     does not assign force-field parameters, solvate, neutralize, or prepare
-    topology files. The optional ``work_dir`` is passed to the BioSimSpace
-    GROMACS process so the generated intermediate files stay in a predictable
-    directory when the caller wants that. The function intentionally uses
-    BioSimSpace's standard ``Minimisation`` protocol rather than manually
-    writing GROMACS ``.mdp`` files, because this first step should stay close
-    to the BioSimSpace public API.
+    topology files. When ``params`` is not provided, the helper keeps the
+    original conservative behaviour and uses BioSimSpace's standard
+    ``Minimisation`` protocol. When ``params`` is provided, it is passed through
+    the custom GROMACS protocol helper so staged workflows can use explicit MDP
+    blocks such as steepest-descent and conjugate-gradient minimization.
     """
+    if params is not None:
+        minimized, _protocol = run_gro_custom(
+            parameters=params,
+            system=system,
+            work_dir=work_dir,
+        )
+        return minimized
+
     minimization_protocol = BSS.Protocol.Minimisation()
 
     kwargs = {"work_dir": str(work_dir)} if work_dir else {}
@@ -107,12 +119,12 @@ def run_npt_equilibration(
     This helper creates a BioSimSpace equilibration protocol for an already
     heated system at 300 K and 1 atm. The ``simulation_time`` argument controls
     only the length of this equilibration stage and should be provided as a
-    BioSimSpace time object by the caller. The ``heated`` system is assumed to
-    be structurally stable enough to start pressure coupling, because this
-    function does not run minimization, diagnose LINCS problems, or inspect
-    density convergence. Backbone restraints remain enabled as the conservative
-    first default so this helper matches the early heating protocol before a
-    later configurable restraint helper is introduced.
+    BioSimSpace time object by the caller. The ``heated`` system is assumed to be
+    structurally stable enough to start pressure coupling, because this function
+    does not run minimization, diagnose LINCS problems, or inspect density
+    convergence. Backbone restraints remain enabled as the conservative first
+    default so this helper matches the early heating protocol before a later
+    configurable restraint helper is introduced.
     """
     equilibration_protocol = BSS.Protocol.Equilibration(
         runtime=simulation_time,

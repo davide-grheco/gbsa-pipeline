@@ -15,9 +15,11 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from gbsa_pipeline.change_defaults import GromacsParams
 from gbsa_pipeline.docking import (
     DockingBox,
     DockingRequest,
@@ -27,6 +29,7 @@ from gbsa_pipeline.docking import (
     load_first_sdf_molecule,
     prepare_ligand_with_meeko,
 )
+from gbsa_pipeline.md import run_minimization
 from gbsa_pipeline.parametrization import (
     ParametrizationInput,
     parametrize,
@@ -48,6 +51,61 @@ DOCKPROTEIN_BOX = DockingBox(
     size=(10.0, 10.0, 10.0),
 )
 
+SD_MINIMIZATION_PARAMS: dict[str, Any] = {
+    "integrator": "steep",
+    "nsteps": 10000,
+    "emtol": 100.0,
+    "emstep": 0.01,
+    "cutoff_scheme": "Verlet",
+    "nstlist": 20,
+    "pbc": "xyz",
+    "rlist": 1.221,
+    "coulombtype": "PME",
+    "rcoulomb": 1.2,
+    "fourierspacing": 0.16,
+    "pme_order": 4,
+    "ewald_rtol": 1e-5,
+    "vdwtype": "Cut-off",
+    "vdw_modifier": "Force-switch",
+    "rvdw_switch": 1.0,
+    "rvdw": 1.2,
+    "constraints": "none",
+    "tcoupl": "no",
+    "pcoupl": "no",
+    "gen_vel": "no",
+    "nstlog": 500,
+    "nstenergy": 500,
+    "nstxout_compressed": 0,
+}
+
+CG_MINIMIZATION_PARAMS: dict[str, Any] = {
+    "integrator": "cg",
+    "nsteps": 5000,
+    "emtol": 100.0,
+    "emstep": 0.001,
+    "nstcgsteep": 50,
+    "cutoff_scheme": "Verlet",
+    "nstlist": 20,
+    "pbc": "xyz",
+    "rlist": 1.221,
+    "coulombtype": "PME",
+    "rcoulomb": 1.2,
+    "fourierspacing": 0.16,
+    "pme_order": 4,
+    "ewald_rtol": 1e-5,
+    "vdwtype": "Cut-off",
+    "vdw_modifier": "Force-switch",
+    "rvdw_switch": 1.0,
+    "rvdw": 1.2,
+    "constraints": "none",
+    "tcoupl": "no",
+    "pcoupl": "no",
+    "gen_vel": "no",
+    "nstlog": 500,
+    "nstenergy": 500,
+    "nstxout_compressed": 0,
+}
+
 
 @pytest.fixture
 def visual_run_dir(request: pytest.FixtureRequest) -> Path:
@@ -66,26 +124,29 @@ def visual_run_dir(request: pytest.FixtureRequest) -> Path:
 
 
 @pytest.mark.integration
-def test_prepare_inputs_run_docking_parametrize_solvate_and_load_bss_keeps_outputs(
+def test_prepare_inputs_run_docking_parametrize_solvate_load_bss_and_minimize_keeps_outputs(
     visual_run_dir: Path,
 ) -> None:
-    """Run docking, parametrize the docked complex, solvate it, and load BioSimSpace.
+    """Run docking, solvation, BioSimSpace loading, and two minimization stages.
 
     This test is a workflow smoke test, not a detailed unit test of the docking,
-    parametrization, solvation, or BioSimSpace MD modules. The ligand starts
-    from SDF, the receptor starts from PDB, and the docking output is exported
-    back to SDF before it is passed into the parametrization entry point. The
-    parametrized GROMACS coordinate and topology files are then passed into the
-    OpenMM/ParmEd solvation bridge, where retained crystallographic waters are
-    restored before bulk solvent is added. We currently check only that each
-    bridge produces the expected files and that the solvated system can be
-    handed to the later MD helpers.
+    parametrization, solvation, or MD helper modules. The ligand starts from SDF,
+    the receptor starts from PDB, and the docking output is exported back to SDF
+    before it is passed into the parametrization entry point. The parametrized
+    complex is solvated with retained crystallographic waters restored before
+    bulk solvent placement, then loaded into BioSimSpace. The final bridge check
+    runs steepest-descent minimization followed by conjugate-gradient
+    minimization through the public ``run_minimization`` helper using explicit
+    GROMACS parameter blocks.
     """
     if shutil.which("vina") is None:
         pytest.skip("vina not available in PATH")
 
     if shutil.which(MEEKO_RECEPTOR_BINARY) is None:
         pytest.skip(f"{MEEKO_RECEPTOR_BINARY} not available in PATH")
+
+    if shutil.which("gmx") is None and shutil.which("gmx_mpi") is None:
+        pytest.skip("GROMACS executable not available in PATH")
 
     if not DOCKLIGAND_SDF.exists():
         pytest.skip(f"missing ligand test file: {DOCKLIGAND_SDF}")
@@ -103,6 +164,11 @@ def test_prepare_inputs_run_docking_parametrize_solvate_and_load_bss_keeps_outpu
     solvation_dir = visual_run_dir / "solvation"
     restored_crystal_waters_pdb = solvation_dir / "restored_crystal_waters.pdb"
     solvation_dir.mkdir(parents=True, exist_ok=True)
+
+    sd_minimization_dir = visual_run_dir / "minimization_steepest_descent"
+    cg_minimization_dir = visual_run_dir / "minimization_conjugate_gradient"
+    sd_minimization_dir.mkdir(parents=True, exist_ok=True)
+    cg_minimization_dir.mkdir(parents=True, exist_ok=True)
 
     ligand_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF, remove_hs=False)
 
@@ -196,3 +262,21 @@ def test_prepare_inputs_run_docking_parametrize_solvate_and_load_bss_keeps_outpu
     bss_system = solvated.load_bss()
 
     assert bss_system is not None
+
+    sd_minimized = run_minimization(
+        bss_system,
+        work_dir=sd_minimization_dir,
+        params=GromacsParams(**SD_MINIMIZATION_PARAMS),
+    )
+
+    assert sd_minimized is not None
+    assert any(sd_minimization_dir.iterdir())
+
+    cg_minimized = run_minimization(
+        sd_minimized,
+        work_dir=cg_minimization_dir,
+        params=GromacsParams(**CG_MINIMIZATION_PARAMS),
+    )
+
+    assert cg_minimized is not None
+    assert any(cg_minimization_dir.iterdir())
