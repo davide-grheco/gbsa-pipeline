@@ -80,8 +80,9 @@ class GromacsParams(BaseModel):
     use enums imported from ``change_defaults_enum`` so invalid common options
     are rejected before a GROMACS process is started. The ``integrator`` field
     also accepts ``steep`` and ``cg`` because those are GROMACS minimization
-    integrators and are not covered by the original MD-oriented enum. The
-    serialization helpers render Python field names into GROMACS-style MDP keys.
+    integrators and are not covered by the original MD-oriented enum. Optional
+    fields such as ``define`` and annealing settings are emitted only when the
+    caller supplies them, so the default MDP remains compact.
     """
 
     model_config = ConfigDict(
@@ -148,25 +149,38 @@ class GromacsParams(BaseModel):
     lj_pme_comb_rule: LJPMECombination = LJPMECombination.GEOMETRIC
     pcoupl: Barostat = Barostat.NO
     refcoord_scaling: str = "No"
+
     # Thermostat
     tcoupl: Thermostat = Thermostat.NO
     tc_grps: str = "System"
     tau_t: float = 0.1
     ref_t: float = 300.0
     nhchainlength: int = 10
-    # Barostat (additional coupling fields)
+
+    # Annealing
+    annealing: str | None = None
+    annealing_npoints: int | None = None
+    annealing_time: str | None = None
+    annealing_temp: str | None = None
+
+    # Barostat and pressure coupling
     pcoupltype: PCoupleType = PCoupleType.ISOTROPIC
     tau_p: float = 2.0
     ref_p: float = 1.0
     compressibility: float = 4.5e-5
+
+    # Position restraints and preprocessing
+    define: str | None = None
+
     # Velocity generation
     gen_vel: VelocityGeneration = VelocityGeneration.NO
     gen_temp: float = 300.0
     gen_seed: int = -1
+
     # Bond constraints
     constraints: Constraints = Constraints.NONE
     constraint_algorithm: ConstraintsAlgorithms = ConstraintsAlgorithms.LINCS
-    continuation: bool = False
+    continuation: bool | str = False
     shake_sor: str = "no"
     shake_tol: float = 0.0001
     lincs_order: int = 4
@@ -224,6 +238,23 @@ class GromacsParams(BaseModel):
 
         return integrator
 
+    @field_validator("tcoupl", mode="before")
+    @classmethod
+    def _normalise_tcoupl(cls, value: Thermostat | str) -> Thermostat | str:
+        """Normalise thermostat coupling strings before enum validation.
+
+        GROMACS examples and human-written parameter blocks often use
+        ``V-rescale`` while the enum stores the canonical lower-case value
+        ``v-rescale``. This validator accepts that common spelling without
+        weakening the field to arbitrary strings. Existing enum instances are
+        passed through unchanged. Other invalid values still fail during enum
+        validation.
+        """
+        if isinstance(value, Thermostat):
+            return value
+
+        return str(value).lower().strip()
+
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any]) -> GromacsParams:
         """Instantiate from a mapping using GROMACS or Python-style keys.
@@ -252,13 +283,16 @@ class GromacsParams(BaseModel):
         hyphens, matching GROMACS MDP syntax. The ``vdwtype`` key is already in
         GROMACS spelling and is therefore emitted unchanged. Enum values are
         serialized through their ``.value`` attribute, while minimization
-        integrators such as ``steep`` and ``cg`` remain plain strings. The
-        returned mapping is the single source used by ``to_mdp_lines`` and the
-        custom BioSimSpace protocol wrapper.
+        integrators such as ``steep`` and ``cg`` remain plain strings. Fields
+        with value ``None`` are skipped so optional MDP parameters are emitted
+        only when explicitly requested.
         """
         result = {}
 
         for field_name, field_value in self.model_dump().items():
+            if field_value is None:
+                continue
+
             serialized = field_value.value if isinstance(field_value, Enum) else field_value
             key = field_name if field_name == "vdwtype" else field_name.replace("_", "-")
             result[key] = serialized

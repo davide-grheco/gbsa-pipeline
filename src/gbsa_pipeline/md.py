@@ -8,9 +8,9 @@ parametrized BioSimSpace/Sire system, because parametrization, solvation, file
 conversion, and workflow orchestration belong to later commits. Keeping these
 functions small makes the first MD protocol changes easy to review and easy to
 replace if the final combined MD stage needs a different internal structure.
-The functions use BioSimSpace protocol objects directly by default, while
-``run_minimization`` can also use explicit GROMACS parameter blocks for the
-staged minimization workflow.
+The functions use BioSimSpace protocol objects directly by default, while the
+staged workflow can pass explicit GROMACS parameter blocks through the existing
+helpers when tighter control over MDP settings is required.
 """
 
 from __future__ import annotations
@@ -74,19 +74,28 @@ def run_heating(
     simulation_time: BSS.Types.Time,
     minimized: sire.System,
     work_dir: Path | None = None,
+    params: GromacsParams | Mapping[str, Any] | None = None,
 ) -> sire.System:
-    """Run a BioSimSpace NVT heating procedure.
+    """Run a BioSimSpace/GROMACS NVT heating procedure.
 
-    This helper creates a BioSimSpace equilibration protocol that heats an
-    already minimized system from 0 K to 300 K. The ``simulation_time`` argument
-    controls the runtime of the heating stage and is expected to be a
-    BioSimSpace time object, for example a value built with
-    ``BSS.Units.Time.picosecond``. The ``minimized`` system is assumed to be the
-    output of a previous minimization step, because this function does not check
-    energy convergence or repair unstable structures. Backbone restraints are
-    kept as the first conservative default, matching the current base protocol
-    before a later restraint-selection helper is added.
+    This helper creates a heating stage for an already minimized system. The
+    default path uses ``BSS.Protocol.Equilibration`` from 0 K to 300 K with
+    backbone restraints, preserving the original BioSimSpace-driven behaviour.
+    When ``params`` is provided, the helper routes the system through the custom
+    GROMACS protocol runner instead, so callers can provide exact MDP settings
+    such as annealing, velocity generation, LINCS options, and ``define =
+    -DPOSRES``. The ``simulation_time`` argument remains part of the public
+    signature for the default BioSimSpace path, but the custom parameter path
+    uses the runtime encoded by ``dt`` and ``nsteps`` in the supplied MDP block.
     """
+    if params is not None:
+        heated, _protocol = run_gro_custom(
+            parameters=params,
+            system=minimized,
+            work_dir=work_dir,
+        )
+        return heated
+
     heating_protocol = BSS.Protocol.Equilibration(
         runtime=simulation_time,
         temperature_start=0 * BSS.Units.Temperature.kelvin,
@@ -113,19 +122,29 @@ def run_npt_equilibration(
     simulation_time: BSS.Types.Time,
     heated: sire.System,
     work_dir: Path | None = None,
+    params: GromacsParams | Mapping[str, Any] | None = None,
 ) -> sire.System:
-    """Run a BioSimSpace NPT equilibration procedure.
+    """Run a BioSimSpace/GROMACS NPT equilibration procedure.
 
-    This helper creates a BioSimSpace equilibration protocol for an already
-    heated system at 300 K and 1 atm. The ``simulation_time`` argument controls
-    only the length of this equilibration stage and should be provided as a
-    BioSimSpace time object by the caller. The ``heated`` system is assumed to be
-    structurally stable enough to start pressure coupling, because this function
-    does not run minimization, diagnose LINCS problems, or inspect density
-    convergence. Backbone restraints remain enabled as the conservative first
-    default so this helper matches the early heating protocol before a later
-    configurable restraint helper is introduced.
+    This helper creates an NPT equilibration stage for an already heated system.
+    The default path uses ``BSS.Protocol.Equilibration`` at 300 K and 1 atm with
+    backbone restraints, preserving the original BioSimSpace-driven behaviour.
+    When ``params`` is provided, the helper routes the system through the custom
+    GROMACS protocol runner instead, so callers can provide exact MDP settings
+    such as C-rescale pressure coupling, reference-coordinate scaling, LINCS
+    options, and ``define = -DPOSRES``. The ``simulation_time`` argument remains
+    part of the public signature for the default BioSimSpace path, but the
+    custom parameter path uses the runtime encoded by ``dt`` and ``nsteps`` in
+    the supplied MDP block.
     """
+    if params is not None:
+        equilibrated, _protocol = run_gro_custom(
+            parameters=params,
+            system=heated,
+            work_dir=work_dir,
+        )
+        return equilibrated
+
     equilibration_protocol = BSS.Protocol.Equilibration(
         runtime=simulation_time,
         temperature=300 * BSS.Units.Temperature.kelvin,
