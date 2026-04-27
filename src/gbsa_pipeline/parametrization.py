@@ -1,3 +1,5 @@
+# src/gbsa_pipeline/parametrization.py
+
 """Parametrize protein-ligand complexes."""
 
 from __future__ import annotations
@@ -212,6 +214,85 @@ _GAFF_FF_VERSION: dict[LigandFF, str] = {
     LigandFF.GAFF2: "gaff-2.11",
 }
 
+_WATER_RESIDUE_NAMES = {"HOH", "WAT", "TIP3", "TIP3P", "SOL"}
+_PDB_COORDINATE_RECORD_PREFIXES = ("ATOM  ", "HETATM")
+_PDB_RESIDUE_NAME_START = 17
+_PDB_RESIDUE_NAME_END = 20
+
+
+def _is_crystal_water_pdb_record(line: str) -> bool:
+    """Return whether a PDB coordinate record describes crystallographic water.
+
+    The parametrization stage intentionally builds only the dry protein-ligand
+    system because explicit solvent is added later by the solvation stage. This
+    helper only inspects fixed-width PDB coordinate records, so it does not try
+    to parse mmCIF or arbitrary whitespace-delimited text. It keeps water
+    filtering close to PDB text handling instead of hiding it inside the force
+    field setup. Non-coordinate records always return ``False`` so headers,
+    connectivity records, and metadata do not leak into the extracted water file.
+    """
+    if not line.startswith(_PDB_COORDINATE_RECORD_PREFIXES):
+        return False
+
+    residue_name = line[_PDB_RESIDUE_NAME_START:_PDB_RESIDUE_NAME_END].strip().upper()
+    return residue_name in _WATER_RESIDUE_NAMES
+
+
+def _write_crystal_waters_pdb(protein_pdb: Path, output_pdb: Path) -> Path | None:
+    """Write crystallographic water coordinate records to a separate PDB file.
+
+    The generated file is an inspection and preservation artefact; it is not
+    used by the default OpenMM parametrization path. The default parametrization
+    step remains dry so water handling happens once, in ``solvate_openmm(...)``,
+    with the selected bulk water model and ion settings. Only coordinate records
+    with common water residue names are written, which avoids copying protein,
+    ligand, metal, or header records into the water-only file. ``None`` is
+    returned when no water records are present, and an old generated file is
+    removed to avoid stale artefacts in persistent integration-test folders.
+    """
+    water_lines = [
+        line for line in protein_pdb.read_text(encoding="utf-8").splitlines() if _is_crystal_water_pdb_record(line)
+    ]
+
+    if not water_lines:
+        with contextlib.suppress(FileNotFoundError):
+            output_pdb.unlink()
+        return None
+
+    output_pdb.parent.mkdir(parents=True, exist_ok=True)
+    output_pdb.write_text("\n".join(water_lines) + "\nEND\n", encoding="utf-8")
+    return output_pdb
+
+
+def _remove_crystal_waters_from_modeller(pdb: PDBFile) -> Modeller:
+    """Return an OpenMM modeller object with crystallographic waters removed.
+
+    OpenMM protein force-field XML files should parameterize the dry protein
+    here, not the crystallographic water molecules from the input structure.
+    Bulk solvent is added in a later explicit solvation step, which keeps the
+    parametrization and solvation responsibilities separate. This helper uses
+    OpenMM's own ``Modeller.delete(...)`` method instead of maintaining a second
+    topology parser in this module. The returned modeller preserves the
+    non-water protein coordinates and is then combined with the ligand topology.
+    """
+    modeller = Modeller(pdb.topology, pdb.positions)
+    atoms_before = modeller.topology.getNumAtoms()
+    water_residues = [
+        residue for residue in modeller.topology.residues() if residue.name.strip().upper() in _WATER_RESIDUE_NAMES
+    ]
+
+    if water_residues:
+        modeller.delete(water_residues)
+
+    atoms_after = modeller.topology.getNumAtoms()
+
+    logger.debug(
+        "Removed crystallographic waters from protein topology (%d -> %d atoms).",
+        atoms_before,
+        atoms_after,
+    )
+    return modeller
+
 
 def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
     work_dir = inp.work_dir or Path(tempfile.mkdtemp(prefix="gbsa_param_"))
@@ -219,8 +300,21 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
 
     # --- Protein -------------------------------------------------------
     logger.debug("Loading protein PDB: %s …", inp.protein_pdb)
+    crystal_waters_pdb = _write_crystal_waters_pdb(
+        inp.protein_pdb,
+        work_dir / "crystal_waters.pdb",
+    )
+    if crystal_waters_pdb is None:
+        logger.debug("No crystallographic waters found in protein PDB.")
+    else:
+        logger.debug("Crystal waters written → %s.", crystal_waters_pdb)
+
     pdb = PDBFile(str(inp.protein_pdb))
-    logger.debug("Protein PDB loaded (%d atoms).", pdb.topology.getNumAtoms())
+    protein_modeller = _remove_crystal_waters_from_modeller(pdb)
+    logger.debug(
+        "Protein PDB loaded without crystal waters (%d atoms).",
+        protein_modeller.topology.getNumAtoms(),
+    )
 
     # --- Ligand --------------------------------------------------------
     logger.debug("Loading ligand SDF: %s …", inp.ligand_sdf)
@@ -271,7 +365,7 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
     logger.debug("GAFF template generator registered.")
 
     logger.debug("Combining protein+ligand topology …")
-    modeller = Modeller(pdb.topology, pdb.positions)
+    modeller = Modeller(protein_modeller.topology, protein_modeller.positions)
     modeller.add(ligand.to_topology().to_openmm(), ligand.conformers[0].to_openmm())
     logger.debug("Combined topology: %d atoms.", modeller.topology.getNumAtoms())
 
