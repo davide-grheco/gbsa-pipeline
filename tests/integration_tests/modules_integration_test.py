@@ -76,9 +76,10 @@ def test_prepare_inputs_run_docking_parametrize_solvate_and_load_bss_keeps_outpu
     from SDF, the receptor starts from PDB, and the docking output is exported
     back to SDF before it is passed into the parametrization entry point. The
     parametrized GROMACS coordinate and topology files are then passed into the
-    OpenMM/ParmEd solvation bridge, and the solvated files are loaded into
-    BioSimSpace. We currently check only that each bridge produces the expected
-    files and that the solvated system can be handed to the later MD helpers.
+    OpenMM/ParmEd solvation bridge, where retained crystallographic waters are
+    restored before bulk solvent is added. We currently check only that each
+    bridge produces the expected files and that the solvated system can be
+    handed to the later MD helpers.
     """
     if shutil.which("vina") is None:
         pytest.skip("vina not available in PATH")
@@ -95,9 +96,12 @@ def test_prepare_inputs_run_docking_parametrize_solvate_and_load_bss_keeps_outpu
     ligand_pdbqt = visual_run_dir / "dockligand.pdbqt"
     receptor_pdbqt = visual_run_dir / "dockprotein.pdbqt"
     docked_sdf = visual_run_dir / "dockligand_vina_out.sdf"
+
     parametrization_dir = visual_run_dir / "parametrization"
     crystal_waters_pdb = parametrization_dir / "crystal_waters.pdb"
+
     solvation_dir = visual_run_dir / "solvation"
+    restored_crystal_waters_pdb = solvation_dir / "restored_crystal_waters.pdb"
     solvation_dir.mkdir(parents=True, exist_ok=True)
 
     ligand_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF, remove_hs=False)
@@ -163,6 +167,7 @@ def test_prepare_inputs_run_docking_parametrize_solvate_and_load_bss_keeps_outpu
 
     assert crystal_waters_pdb.exists()
     assert crystal_waters_pdb.read_text(encoding="utf-8").strip()
+    assert parametrized.crystal_waters_pdb == crystal_waters_pdb
     assert parametrized.gro_file == parametrization_dir / "complex.gro"
     assert parametrized.top_file == parametrization_dir / "complex.top"
     assert parametrized.gro_file.exists()
@@ -185,6 +190,8 @@ def test_prepare_inputs_run_docking_parametrize_solvate_and_load_bss_keeps_outpu
     assert solvated.top_file == solvation_dir / "solvated.top"
     assert solvated.gro_file.exists()
     assert solvated.top_file.exists()
+    assert restored_crystal_waters_pdb.exists()
+    assert restored_crystal_waters_pdb.read_text(encoding="utf-8").strip()
 
     bss_system = solvated.load_bss()
 
