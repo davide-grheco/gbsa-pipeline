@@ -1,3 +1,5 @@
+# src/gbsa_pipeline/md.py
+
 """Small BioSimSpace MD protocol helpers for gbsa-pipeline.
 
 This module currently contains the first isolated BioSimSpace building blocks
@@ -134,36 +136,40 @@ def run_npt_equilibration(
     return equilibrated
 
 
-def run_staged_bss_workflow(
-    system: sire.System,
-    heating_time: BSS.Types.Time,
-    npt_equilibration_time: BSS.Types.Time,
+def run_production(
+    simulation_time: BSS.Types.Time,
+    equilibrated: sire.System,
     work_dir: Path | None = None,
 ) -> sire.System:
-    """Run the current staged BioSimSpace MD workflow.
+    """Run a BioSimSpace production MD procedure.
 
-    This function composes the small helpers currently available in this module:
-    minimization, NVT heating, and NPT equilibration. The input ``system`` is
-    expected to be an already parametrized BioSimSpace/Sire system because this
-    workflow does not yet prepare files, solvate, or assign force-field
-    parameters. The optional ``work_dir`` is used as a parent directory for the
-    individual process directories when provided, so intermediate files stay
-    separated by stage without adding a larger output model yet. The returned
-    system is the final system produced by the NPT equilibration helper.
+    This helper runs the first isolated production step for an already
+    equilibrated BioSimSpace/Sire system. The ``simulation_time`` argument
+    controls the length of the production stage and should be passed as a
+    BioSimSpace time object by the caller. The ``equilibrated`` system is
+    assumed to come from previous minimization, heating, and equilibration
+    stages, because this function does not check temperature, pressure, density,
+    or prior convergence. The helper intentionally uses BioSimSpace's standard
+    production protocol without adding output collection or custom GROMACS
+    ``.mdp`` handling yet, because those concerns belong to the later pipeline
+    orchestration layer.
     """
-    minimized = run_minimization(
-        system=system,
-        work_dir=work_dir / "minimization" if work_dir else None,
-    )
-    heated = run_heating(
-        simulation_time=heating_time,
-        minimized=minimized,
-        work_dir=work_dir / "heating" if work_dir else None,
-    )
-    equilibrated = run_npt_equilibration(
-        simulation_time=npt_equilibration_time,
-        heated=heated,
-        work_dir=work_dir / "npt_equilibration" if work_dir else None,
+    production_protocol = BSS.Protocol.Production(
+        runtime=simulation_time,
+        temperature=300 * BSS.Units.Temperature.kelvin,
+        pressure=1 * BSS.Units.Pressure.atm,
     )
 
-    return equilibrated
+    kwargs = {"work_dir": str(work_dir)} if work_dir else {}
+    production_process = BSS.Process.Gromacs(
+        protocol=production_protocol,
+        system=equilibrated,
+        **kwargs,
+    )
+
+    production_process.start()
+    production_process.wait()
+
+    production = production_process.getSystem(block=True)
+
+    return production
