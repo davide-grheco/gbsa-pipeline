@@ -17,6 +17,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+import BioSimSpace as BSS
 import pytest
 
 from gbsa_pipeline.change_defaults import GromacsParams
@@ -29,7 +30,11 @@ from gbsa_pipeline.docking import (
     load_first_sdf_molecule,
     prepare_ligand_with_meeko,
 )
-from gbsa_pipeline.md import run_minimization
+from gbsa_pipeline.md import (
+    run_heating,
+    run_minimization,
+    run_npt_equilibration,
+)
 from gbsa_pipeline.parametrization import (
     ParametrizationInput,
     parametrize,
@@ -50,9 +55,10 @@ DOCKPROTEIN_BOX = DockingBox(
     center=(10.115, 39.148, 53.112),
     size=(10.0, 10.0, 10.0),
 )
+
 SD_MINIMIZATION_PARAMS: dict[str, Any] = {
     "integrator": "steep",
-    "nsteps": 50000,
+    "nsteps": 100000,
     "emtol": 100.0,
     "emstep": 0.0001,
     "cutoff_scheme": "Verlet",
@@ -123,20 +129,20 @@ def visual_run_dir(request: pytest.FixtureRequest) -> Path:
 
 
 @pytest.mark.integration
-def test_prepare_inputs_run_docking_parametrize_solvate_load_bss_and_minimize_keeps_outputs(
+def test_prepare_inputs_run_docking_parametrize_solvate_minimize_and_bss_restrained_equilibrate_keeps_outputs(
     visual_run_dir: Path,
 ) -> None:
-    """Run docking, solvation, BioSimSpace loading, and two minimization stages.
+    """Run docking, solvation, minimization, and BSS-restrained equilibration.
 
     This test is a workflow smoke test, not a detailed unit test of the docking,
     parametrization, solvation, or MD helper modules. The ligand starts from SDF,
     the receptor starts from PDB, and the docking output is exported back to SDF
     before it is passed into the parametrization entry point. The parametrized
     complex is solvated with retained crystallographic waters restored before
-    bulk solvent placement, then loaded into BioSimSpace. The final bridge check
-    runs steepest-descent minimization followed by conjugate-gradient
-    minimization through the public ``run_minimization`` helper using explicit
-    GROMACS parameter blocks.
+    bulk solvent placement, then loaded into BioSimSpace. The MD bridge check
+    runs explicit steepest-descent and conjugate-gradient minimization parameter
+    blocks, followed by BioSimSpace-native restrained heating and restrained
+    NPT equilibration through the public MD helpers.
     """
     if shutil.which("vina") is None:
         pytest.skip("vina not available in PATH")
@@ -166,8 +172,13 @@ def test_prepare_inputs_run_docking_parametrize_solvate_load_bss_and_minimize_ke
 
     sd_minimization_dir = visual_run_dir / "minimization_steepest_descent"
     cg_minimization_dir = visual_run_dir / "minimization_conjugate_gradient"
+    heating_restrained_dir = visual_run_dir / "heating_bss_restrained"
+    npt_restrained_dir = visual_run_dir / "npt_bss_restrained"
+
     sd_minimization_dir.mkdir(parents=True, exist_ok=True)
     cg_minimization_dir.mkdir(parents=True, exist_ok=True)
+    heating_restrained_dir.mkdir(parents=True, exist_ok=True)
+    npt_restrained_dir.mkdir(parents=True, exist_ok=True)
 
     ligand_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF, remove_hs=False)
 
@@ -279,3 +290,21 @@ def test_prepare_inputs_run_docking_parametrize_solvate_load_bss_and_minimize_ke
 
     assert cg_minimized is not None
     assert any(cg_minimization_dir.iterdir())
+
+    heated = run_heating(
+        50 * BSS.Units.Time.picosecond,
+        cg_minimized,
+        work_dir=heating_restrained_dir,
+    )
+
+    assert heated is not None
+    assert any(heating_restrained_dir.iterdir())
+
+    npt_restrained = run_npt_equilibration(
+        100 * BSS.Units.Time.picosecond,
+        heated,
+        work_dir=npt_restrained_dir,
+    )
+
+    assert npt_restrained is not None
+    assert any(npt_restrained_dir.iterdir())
