@@ -1,5 +1,3 @@
-# src/gbsa_pipeline/md.py
-
 """Small BioSimSpace MD protocol helpers for gbsa-pipeline.
 
 This module currently contains the first isolated BioSimSpace building blocks
