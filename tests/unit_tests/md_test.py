@@ -293,3 +293,96 @@ def test_run_npt_equilibration_omits_work_dir_when_not_provided(
     process.wait.assert_called_once_with()
     process.getSystem.assert_called_once_with(block=True)
     assert result is equilibrated_system
+
+
+def test_run_production_builds_bss_process_and_returns_production_system(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Test that the production helper delegates to BioSimSpace correctly.
+
+    The helper should create a BioSimSpace ``Production`` protocol with the
+    requested runtime, a 300 K temperature, and 1 atm pressure. The optional
+    ``work_dir`` should be converted to a string and passed only as a process
+    keyword, matching the other MD helper behavior. The test mocks BioSimSpace
+    because unit coverage should verify local protocol wiring, not run GROMACS.
+    The returned object should be exactly the system returned by
+    ``getSystem(block=True)``.
+    """
+    equilibrated_system = Mock(name="equilibrated_system")
+    production_system = Mock(name="production_system")
+    simulation_time = Mock(name="simulation_time")
+    production_protocol = Mock(name="production_protocol")
+    process = Mock(name="gromacs_process")
+    process.getSystem.return_value = production_system
+
+    production_factory = Mock(return_value=production_protocol)
+    gromacs_factory = Mock(return_value=process)
+
+    monkeypatch.setattr(md.BSS.Protocol, "Production", production_factory)
+    monkeypatch.setattr(md.BSS.Process, "Gromacs", gromacs_factory)
+
+    result = md.run_production(
+        simulation_time=simulation_time,
+        equilibrated=equilibrated_system,
+        work_dir=tmp_path,
+    )
+
+    production_factory.assert_called_once_with(
+        runtime=simulation_time,
+        temperature=300 * md.BSS.Units.Temperature.kelvin,
+        pressure=1 * md.BSS.Units.Pressure.atm,
+    )
+    gromacs_factory.assert_called_once_with(
+        protocol=production_protocol,
+        system=equilibrated_system,
+        work_dir=str(tmp_path),
+    )
+    process.start.assert_called_once_with()
+    process.wait.assert_called_once_with()
+    process.getSystem.assert_called_once_with(block=True)
+    assert result is production_system
+
+
+def test_run_production_omits_work_dir_when_not_provided(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that the production helper does not invent a work directory.
+
+    The ``work_dir`` argument remains optional so the caller can either choose a
+    predictable process directory or let BioSimSpace create one. When no path is
+    provided, the helper should omit the keyword entirely instead of passing
+    ``work_dir=None``. This test checks only local process construction and
+    return behavior, keeping real production MD execution out of unit coverage.
+    """
+    equilibrated_system = Mock(name="equilibrated_system")
+    production_system = Mock(name="production_system")
+    simulation_time = Mock(name="simulation_time")
+    production_protocol = Mock(name="production_protocol")
+    process = Mock(name="gromacs_process")
+    process.getSystem.return_value = production_system
+
+    production_factory = Mock(return_value=production_protocol)
+    gromacs_factory = Mock(return_value=process)
+
+    monkeypatch.setattr(md.BSS.Protocol, "Production", production_factory)
+    monkeypatch.setattr(md.BSS.Process, "Gromacs", gromacs_factory)
+
+    result = md.run_production(
+        simulation_time=simulation_time,
+        equilibrated=equilibrated_system,
+    )
+
+    production_factory.assert_called_once_with(
+        runtime=simulation_time,
+        temperature=300 * md.BSS.Units.Temperature.kelvin,
+        pressure=1 * md.BSS.Units.Pressure.atm,
+    )
+    gromacs_factory.assert_called_once_with(
+        protocol=production_protocol,
+        system=equilibrated_system,
+    )
+    process.start.assert_called_once_with()
+    process.wait.assert_called_once_with()
+    process.getSystem.assert_called_once_with(block=True)
+    assert result is production_system
