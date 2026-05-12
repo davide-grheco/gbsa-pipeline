@@ -13,7 +13,7 @@ tighter control over test-stage settings is required.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import BioSimSpace as BSS
 
@@ -21,10 +21,9 @@ from gbsa_pipeline.change_defaults import GromacsParams
 from gbsa_pipeline.change_params import set_mdp_key
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
-    import Any
-    import Mapping
     import sire
 
 
