@@ -1,5 +1,3 @@
-# src/gbsa_pipeline/solvation_openmm.py
-
 """OpenMM/ParmEd solvation that bypasses BioSimSpace IO."""
 
 from __future__ import annotations
