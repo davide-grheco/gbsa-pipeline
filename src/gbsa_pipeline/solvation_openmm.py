@@ -213,7 +213,6 @@ def _restore_crystal_waters_before_solvation(
     available.
     """
     if crystal_waters_pdb is None:
-        _remove_stale_file(output_pdb)
         return None
 
     if not crystal_waters_pdb.exists():
