@@ -27,6 +27,10 @@ from gbsa_pipeline.docking import (
     load_first_sdf_molecule,
     prepare_ligand_with_meeko,
 )
+from gbsa_pipeline.parametrization import (
+    ParametrizationInput,
+    parametrize,
+)
 
 TESTDATA = Path(__file__).parents[1] / "testdata"
 DOCKING_TESTDATA = TESTDATA / "docking"
@@ -60,17 +64,20 @@ def visual_run_dir(request: pytest.FixtureRequest) -> Path:
 
 
 @pytest.mark.integration
-def test_prepare_inputs_and_run_docking_keeps_outputs(visual_run_dir: Path) -> None:
-    """Prepare docking inputs and keep the Vina output files for inspection.
+def test_prepare_inputs_run_docking_and_parametrize_keeps_outputs(
+    visual_run_dir: Path,
+) -> None:
+    """Run docking, export the docked ligand to SDF, and parametrize the complex.
 
     This test is a workflow smoke test, not a detailed unit test of the docking
-    module. The ligand starts from SDF and is converted to PDBQT through the
-    public ligand-preparation helper, while the receptor starts from PDB and is
-    converted to PDBQT through the public receptor-preparation helper. The Vina
-    run then uses those prepared files and writes all artefacts into a persistent
-    module-run directory so they can be inspected manually. We currently check
-    only that the workflow produces the expected files, a successful return
-    code, and a parsed docking score.
+    or parametrization modules. The ligand starts from SDF, the receptor starts
+    from PDB, and the docking output is exported back to SDF before it is passed
+    into the parametrization entry point. The generated files stay under the
+    persistent module-run directory so the docked pose, exported SDF, preserved
+    crystallographic waters, and final GROMACS files can be inspected manually.
+    We currently check only that each bridge produces the expected files and
+    that parametrization reaches the `complex.gro` and `complex.top` outputs
+    needed by the next MD step.
     """
     if shutil.which("vina") is None:
         pytest.skip("vina not available in PATH")
@@ -86,6 +93,9 @@ def test_prepare_inputs_and_run_docking_keeps_outputs(visual_run_dir: Path) -> N
 
     ligand_pdbqt = visual_run_dir / "dockligand.pdbqt"
     receptor_pdbqt = visual_run_dir / "dockprotein.pdbqt"
+    docked_sdf = visual_run_dir / "dockligand_vina_out.sdf"
+    parametrization_dir = visual_run_dir / "parametrization"
+    crystal_waters_pdb = parametrization_dir / "crystal_waters.pdb"
 
     ligand_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF, remove_hs=False)
 
@@ -116,27 +126,41 @@ def test_prepare_inputs_and_run_docking_keeps_outputs(visual_run_dir: Path) -> N
         workdir=visual_run_dir,
     )
 
-    result = engine.dock(request=request)
+    docking_result = engine.dock(request=request)
 
     docking_output = visual_run_dir / "dockligand_vina_out.pdbqt"
     docking_log = visual_run_dir / "dockligand_vina.log"
-    docking_output_sdf = visual_run_dir / "dockligand_vina_out.sdf"
+
+    assert docking_result.engine == "vina"
+    assert len(docking_result.poses) == 1
+    assert docking_result.poses[0].pose_path == docking_output
+    assert docking_result.poses[0].pose_path.exists()
+    assert docking_result.poses[0].metadata["returncode"] == 0
+    assert docking_result.poses[0].score is not None
+    assert docking_output.exists()
+    assert docking_log.exists()
 
     exported_sdf = export_pdbqt_to_sdf(
         docking_output,
-        docking_output_sdf,
+        docked_sdf,
         template_mol=ligand_molecule,
         add_hydrogens_after_template=True,
     )
 
-    assert exported_sdf == docking_output_sdf
-    assert docking_output_sdf.exists()
+    assert exported_sdf == docked_sdf
+    assert docked_sdf.exists()
 
-    assert result.engine == "vina"
-    assert len(result.poses) == 1
-    assert result.poses[0].pose_path == docking_output
-    assert result.poses[0].pose_path.exists()
-    assert result.poses[0].metadata["returncode"] == 0
-    assert result.poses[0].score is not None
-    assert docking_output.exists()
-    assert docking_log.exists()
+    parametrized = parametrize(
+        ParametrizationInput(
+            protein_pdb=DOCKPROTEIN_PDB,
+            ligand_sdf=docked_sdf,
+            work_dir=parametrization_dir,
+        )
+    )
+
+    assert crystal_waters_pdb.exists()
+    assert crystal_waters_pdb.read_text(encoding="utf-8").strip()
+    assert parametrized.gro_file == parametrization_dir / "complex.gro"
+    assert parametrized.top_file == parametrization_dir / "complex.top"
+    assert parametrized.gro_file.exists()
+    assert parametrized.top_file.exists()
