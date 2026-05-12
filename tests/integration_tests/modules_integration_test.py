@@ -1,5 +1,3 @@
-# tests/integration_tests/modules_integration_test.py
-
 """Integration tests for visually inspectable module-level workflows.
 
 This module intentionally keeps generated files on disk because the current
@@ -31,6 +29,8 @@ from gbsa_pipeline.parametrization import (
     ParametrizationInput,
     parametrize,
 )
+from gbsa_pipeline.solvation_box import SolvationParams
+from gbsa_pipeline.solvation_openmm import solvate_openmm
 
 TESTDATA = Path(__file__).parents[1] / "testdata"
 DOCKING_TESTDATA = TESTDATA / "docking"
@@ -64,20 +64,20 @@ def visual_run_dir(request: pytest.FixtureRequest) -> Path:
 
 
 @pytest.mark.integration
-def test_prepare_inputs_run_docking_and_parametrize_keeps_outputs(
+def test_prepare_inputs_run_docking_parametrize_and_solvate_keeps_outputs(
     visual_run_dir: Path,
 ) -> None:
-    """Run docking, export the docked ligand to SDF, and parametrize the complex.
+    """Run docking, parametrize the docked complex, and solvate it.
 
-    This test is a workflow smoke test, not a detailed unit test of the docking
-    or parametrization modules. The ligand starts from SDF, the receptor starts
-    from PDB, and the docking output is exported back to SDF before it is passed
-    into the parametrization entry point. The generated files stay under the
-    persistent module-run directory so the docked pose, exported SDF, preserved
-    crystallographic waters, and final GROMACS files can be inspected manually.
-    We currently check only that each bridge produces the expected files and
-    that parametrization reaches the `complex.gro` and `complex.top` outputs
-    needed by the next MD step.
+    This test is a workflow smoke test, not a detailed unit test of the docking,
+    parametrization, solvation, or BioSimSpace MD modules. The ligand starts
+    from SDF, the receptor starts from PDB, and the docking output is exported
+    back to SDF before it is passed into the parametrization entry point. The
+    parametrized GROMACS coordinate and topology files are then passed into the
+    OpenMM/ParmEd solvation bridge, where retained crystallographic waters are
+    restored before bulk solvent is added. We currently check only that each
+    bridge produces the expected files and that the solvated system can be
+    handed to the later MD helpers.
     """
     if shutil.which("vina") is None:
         pytest.skip("vina not available in PATH")
@@ -94,8 +94,13 @@ def test_prepare_inputs_run_docking_and_parametrize_keeps_outputs(
     ligand_pdbqt = visual_run_dir / "dockligand.pdbqt"
     receptor_pdbqt = visual_run_dir / "dockprotein.pdbqt"
     docked_sdf = visual_run_dir / "dockligand_vina_out.sdf"
+
     parametrization_dir = visual_run_dir / "parametrization"
     crystal_waters_pdb = parametrization_dir / "crystal_waters.pdb"
+
+    solvation_dir = visual_run_dir / "solvation"
+    restored_crystal_waters_pdb = solvation_dir / "restored_crystal_waters.pdb"
+    solvation_dir.mkdir(parents=True, exist_ok=True)
 
     ligand_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF, remove_hs=False)
 
@@ -160,7 +165,32 @@ def test_prepare_inputs_run_docking_and_parametrize_keeps_outputs(
 
     assert crystal_waters_pdb.exists()
     assert crystal_waters_pdb.read_text(encoding="utf-8").strip()
+    assert parametrized.crystal_waters_pdb == crystal_waters_pdb
     assert parametrized.gro_file == parametrization_dir / "complex.gro"
     assert parametrized.top_file == parametrization_dir / "complex.top"
     assert parametrized.gro_file.exists()
     assert parametrized.top_file.exists()
+
+    solvated = solvate_openmm(
+        parametrized=parametrized,
+        params=SolvationParams(
+            water_model="tip3p",
+            shape="truncated_octahedron",
+            padding=1.0,
+            ion_concentration=0.15,
+            neutralize=True,
+        ),
+        output_gro=solvation_dir / "solvated.gro",
+        output_top=solvation_dir / "solvated.top",
+    )
+
+    assert solvated.gro_file == solvation_dir / "solvated.gro"
+    assert solvated.top_file == solvation_dir / "solvated.top"
+    assert solvated.gro_file.exists()
+    assert solvated.top_file.exists()
+    assert restored_crystal_waters_pdb.exists()
+    assert restored_crystal_waters_pdb.read_text(encoding="utf-8").strip()
+
+    bss_system = solvated.load_bss()
+
+    assert bss_system is not None
