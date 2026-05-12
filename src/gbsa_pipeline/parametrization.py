@@ -145,17 +145,22 @@ class ParametrisedComplex:
         The force field configuration used to produce this complex.
         Stored so that downstream steps can record or reproduce the run.
     forcefield:
-        The OpenMM ``ForceField`` (with GAFF registered and ligand charges
-        already assigned) used during parametrization.  Passed directly to
-        :func:`~gbsa_pipeline.solvation_openmm.solvate_openmm` so that
-        water XML can be loaded into it without rebuilding from scratch or
-        re-running AM1-BCC.  ``None`` when the complex was loaded from disk
-        (e.g. :func:`~gbsa_pipeline.frcmod_parametrization.load_amber_complex`).
+        The OpenMM ``ForceField`` with the protein and ligand template
+        generator registered. It is passed downstream to solvation, where the
+        selected bulk-water XML can be added before generating the final
+        solvated system. ``None`` when the complex was loaded from disk.
     parmed_structure:
-        The ParmEd ``Structure`` holding every protein+ligand force field
-        parameter produced during parametrization.  Passed directly to
+        The ParmEd ``Structure`` holding the dry protein-ligand force field
+        parameters produced during parametrization. It is passed directly to
         :func:`~gbsa_pipeline.solvation_openmm.solvate_openmm` to avoid
-        reloading from the GROMACS files.  ``None`` when loaded from disk.
+        reloading from the GROMACS files. ``None`` when loaded from disk.
+    crystal_waters_pdb:
+        Optional PDB file containing crystallographic waters extracted from the
+        protein input before OpenMM protein-ligand parametrization. The dry
+        parametrized complex avoids HOH template failures, while the saved water
+        file lets the solvation step restore those waters before adding bulk
+        solvent. ``None`` means no crystallographic waters were found or the
+        complex was loaded through a path that did not preserve them.
     """
 
     gro_file: Path
@@ -163,6 +168,7 @@ class ParametrisedComplex:
     config: ParametrizationConfig
     forcefield: Any = field(default=None, hash=False, compare=False, repr=False)
     parmed_structure: Any = field(default=None, hash=False, compare=False, repr=False)
+    crystal_waters_pdb: Path | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -227,8 +233,8 @@ def _is_crystal_water_pdb_record(line: str) -> bool:
     system because explicit solvent is added later by the solvation stage. This
     helper only inspects fixed-width PDB coordinate records, so it does not try
     to parse mmCIF or arbitrary whitespace-delimited text. It keeps water
-    filtering close to PDB text handling instead of hiding it inside the force
-    field setup. Non-coordinate records always return ``False`` so headers,
+    filtering close to PDB text handling instead of hiding it inside force-field
+    setup. Non-coordinate records always return ``False`` so headers,
     connectivity records, and metadata do not leak into the extracted water file.
     """
     if not line.startswith(_PDB_COORDINATE_RECORD_PREFIXES):
@@ -242,13 +248,14 @@ def _write_crystal_waters_pdb(protein_pdb: Path, output_pdb: Path) -> Path | Non
     """Write crystallographic water coordinate records to a separate PDB file.
 
     The generated file is an inspection and preservation artefact; it is not
-    used by the default OpenMM parametrization path. The default parametrization
-    step remains dry so water handling happens once, in ``solvate_openmm(...)``,
-    with the selected bulk water model and ion settings. Only coordinate records
-    with common water residue names are written, which avoids copying protein,
-    ligand, metal, or header records into the water-only file. ``None`` is
-    returned when no water records are present, and an old generated file is
-    removed to avoid stale artefacts in persistent integration-test folders.
+    part of the dry OpenMM protein-ligand parametrization path. The solvation
+    step can later restore these waters before adding bulk solvent, so the
+    freshly placed solvent is generated around the retained crystallographic
+    waters instead of ignoring them. Only coordinate records with common water
+    residue names are written, which avoids copying protein, ligand, metal, or
+    header records into the water-only file. ``None`` is returned when no water
+    records are present, and an old generated file is removed to avoid stale
+    artefacts in persistent integration-test folders.
     """
     water_lines = [
         line for line in protein_pdb.read_text(encoding="utf-8").splitlines() if _is_crystal_water_pdb_record(line)
@@ -269,11 +276,12 @@ def _remove_crystal_waters_from_modeller(pdb: PDBFile) -> Modeller:
 
     OpenMM protein force-field XML files should parameterize the dry protein
     here, not the crystallographic water molecules from the input structure.
-    Bulk solvent is added in a later explicit solvation step, which keeps the
-    parametrization and solvation responsibilities separate. This helper uses
-    OpenMM's own ``Modeller.delete(...)`` method instead of maintaining a second
-    topology parser in this module. The returned modeller preserves the
-    non-water protein coordinates and is then combined with the ligand topology.
+    Bulk solvent and retained crystallographic waters are handled by the later
+    solvation stage, which keeps parametrization and solvation responsibilities
+    separate. This helper uses OpenMM's own ``Modeller.delete(...)`` method
+    instead of maintaining a second topology parser in this module. The returned
+    modeller preserves the non-water protein coordinates and is then combined
+    with the ligand topology.
     """
     modeller = Modeller(pdb.topology, pdb.positions)
     atoms_before = modeller.topology.getNumAtoms()
@@ -367,7 +375,7 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
     logger.debug("Combining protein+ligand topology …")
     modeller = Modeller(protein_modeller.topology, protein_modeller.positions)
     modeller.add(ligand.to_topology().to_openmm(), ligand.conformers[0].to_openmm())
-    logger.debug("Combined topology: %d atoms.", modeller.topology.getNumAtoms())
+    logger.debug("Combined dry topology: %d atoms.", modeller.topology.getNumAtoms())
 
     logger.debug("Creating OpenMM system (may take a moment) …")
     system: System = forcefield.createSystem(
@@ -395,6 +403,7 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
         config=inp.config,
         forcefield=forcefield,
         parmed_structure=structure,
+        crystal_waters_pdb=crystal_waters_pdb,
     )
 
     cache_file = work_dir / "complex.pickle"
