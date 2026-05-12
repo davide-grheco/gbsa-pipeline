@@ -11,6 +11,11 @@ back to disposable runtime directories or become explicit manual smoke tests.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Any
+
 import shutil
 from pathlib import Path
 
@@ -45,6 +50,60 @@ DOCKPROTEIN_BOX = DockingBox(
     center=(10.115, 39.148, 53.112),
     size=(10.0, 10.0, 10.0),
 )
+SD_MINIMIZATION_PARAMS: dict[str, Any] = {
+    "integrator": "steep",
+    "nsteps": 50000,
+    "emtol": 100.0,
+    "emstep": 0.0001,
+    "cutoff_scheme": "Verlet",
+    "nstlist": 20,
+    "pbc": "xyz",
+    "rlist": 1.221,
+    "coulombtype": "PME",
+    "rcoulomb": 1.2,
+    "fourierspacing": 0.16,
+    "pme_order": 4,
+    "ewald_rtol": 1e-5,
+    "vdwtype": "Cut-off",
+    "vdw_modifier": "Force-switch",
+    "rvdw_switch": 1.0,
+    "rvdw": 1.2,
+    "constraints": "none",
+    "tcoupl": "no",
+    "pcoupl": "no",
+    "gen_vel": "no",
+    "nstlog": 500,
+    "nstenergy": 500,
+    "nstxout_compressed": 0,
+}
+
+CG_MINIMIZATION_PARAMS: dict[str, Any] = {
+    "integrator": "cg",
+    "nsteps": 5000,
+    "emtol": 100.0,
+    "emstep": 0.001,
+    "nstcgsteep": 50,
+    "cutoff_scheme": "Verlet",
+    "nstlist": 20,
+    "pbc": "xyz",
+    "rlist": 1.221,
+    "coulombtype": "PME",
+    "rcoulomb": 1.2,
+    "fourierspacing": 0.16,
+    "pme_order": 4,
+    "ewald_rtol": 1e-5,
+    "vdwtype": "Cut-off",
+    "vdw_modifier": "Force-switch",
+    "rvdw_switch": 1.0,
+    "rvdw": 1.2,
+    "constraints": "none",
+    "tcoupl": "no",
+    "pcoupl": "no",
+    "gen_vel": "no",
+    "nstlog": 500,
+    "nstenergy": 500,
+    "nstxout_compressed": 0,
+}
 
 
 @pytest.fixture
