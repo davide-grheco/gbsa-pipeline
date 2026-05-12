@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 import shutil
 from pathlib import Path
 
+import BioSimSpace as BSS
 import pytest
 
 from gbsa_pipeline.docking import (
@@ -29,6 +30,12 @@ from gbsa_pipeline.docking import (
     export_pdbqt_to_sdf,
     load_first_sdf_molecule,
     prepare_ligand_with_meeko,
+)
+from gbsa_pipeline.md import (
+    run_heating,
+    run_minimization,
+    run_npt_equilibration,
+    run_production,
 )
 from gbsa_pipeline.parametrization import (
     ParametrizationInput,
@@ -50,18 +57,19 @@ DOCKPROTEIN_BOX = DockingBox(
     center=(10.115, 39.148, 53.112),
     size=(10.0, 10.0, 10.0),
 )
-SD_MINIMIZATION_PARAMS: dict[str, Any] = {
+
+SD_PARAMS: dict[str, Any] = {
     "integrator": "steep",
     "nsteps": 50000,
-    "emtol": 100.0,
-    "emstep": 0.0001,
+    "emtol": 1000.0,
+    "emstep": 0.001,
     "cutoff_scheme": "Verlet",
     "nstlist": 20,
     "pbc": "xyz",
-    "rlist": 1.221,
+    "rlist": 1.26,
     "coulombtype": "PME",
     "rcoulomb": 1.2,
-    "fourierspacing": 0.16,
+    "fourierspacing": 0.0,
     "pme_order": 4,
     "ewald_rtol": 1e-5,
     "vdwtype": "Cut-off",
@@ -77,7 +85,7 @@ SD_MINIMIZATION_PARAMS: dict[str, Any] = {
     "nstxout_compressed": 0,
 }
 
-CG_MINIMIZATION_PARAMS: dict[str, Any] = {
+CG_PARAMS: dict[str, Any] = {
     "integrator": "cg",
     "nsteps": 5000,
     "emtol": 100.0,
@@ -105,6 +113,164 @@ CG_MINIMIZATION_PARAMS: dict[str, Any] = {
     "nstxout_compressed": 0,
 }
 
+HEATING_PARAMS: dict[str, Any] = {
+    "integrator": "md",
+    "dt": 0.001,
+    "nsteps": 100000,
+    "cutoff_scheme": "Verlet",
+    "nstlist": 20,
+    "pbc": "xyz",
+    "rlist": 1.221,
+    "coulombtype": "PME",
+    "rcoulomb": 1.2,
+    "fourierspacing": 0.16,
+    "pme_order": 4,
+    "ewald_rtol": 1e-5,
+    "vdwtype": "Cut-off",
+    "vdw_modifier": "Force-switch",
+    "rvdw_switch": 1.0,
+    "rvdw": 1.2,
+    "constraints": "h-bonds",
+    "constraint_algorithm": "LINCS",
+    "lincs_order": 4,
+    "lincs_warnangle": 30.0,
+    "continuation": "no",
+    "gen_vel": "yes",
+    "gen_temp": 20.0,
+    "tcoupl": "V-rescale",
+    "tc_grps": "System",
+    "tau_t": 0.1,
+    "ref_t": 300.0,
+    "pcoupl": "no",
+    "annealing": "single",
+    "annealing_npoints": 8,
+    "annealing_time": "0 40.0 50.0 60.0 70.0 80.0 90.0 100.0",
+    "annealing_temp": "20.0 50.0 50.0 100.0 150.0 200.0 250.0 300.0 ",
+    "define": "-DPOSRES",
+    "nstlog": 500,
+    "nstenergy": 500,
+    "nstcalcenergy": 100,
+    "nstxout_compressed": 1000,
+}
+
+NPT_RESTRAINED_PARAMS: dict[str, Any] = {
+    "integrator": "md",
+    "dt": 0.002,
+    "nsteps": 50000,
+    "cutoff_scheme": "Verlet",
+    "nstlist": 20,
+    "pbc": "xyz",
+    "rlist": 1.221,
+    "coulombtype": "PME",
+    "rcoulomb": 1.2,
+    "fourierspacing": 0.16,
+    "pme_order": 4,
+    "ewald_rtol": 1e-5,
+    "vdwtype": "Cut-off",
+    "vdw_modifier": "Force-switch",
+    "rvdw_switch": 1.0,
+    "rvdw": 1.2,
+    "constraints": "h-bonds",
+    "constraint_algorithm": "LINCS",
+    "lincs_order": 4,
+    "lincs_warnangle": 30.0,
+    "continuation": "yes",
+    "gen_vel": "no",
+    "tcoupl": "V-rescale",
+    "tc_grps": "System",
+    "tau_t": 0.1,
+    "ref_t": 300.0,
+    "pcoupl": "C-rescale",
+    "pcoupltype": "isotropic",
+    "tau_p": 5.0,
+    "ref_p": 1.0,
+    "compressibility": 4.5e-5,
+    "refcoord_scaling": "com",
+    "define": "-DPOSRES",
+    "nstlog": 500,
+    "nstenergy": 500,
+    "nstcalcenergy": 100,
+    "nstxout_compressed": 1000,
+}
+
+NPT_PARAMS: dict[str, Any] = {
+    "integrator": "md",
+    "dt": 0.002,
+    "nsteps": 50000,
+    "cutoff_scheme": "Verlet",
+    "nstlist": 20,
+    "pbc": "xyz",
+    "rlist": 1.221,
+    "coulombtype": "PME",
+    "rcoulomb": 1.2,
+    "fourierspacing": 0.16,
+    "pme_order": 4,
+    "ewald_rtol": 1e-5,
+    "vdwtype": "Cut-off",
+    "vdw_modifier": "Force-switch",
+    "rvdw_switch": 1.0,
+    "rvdw": 1.2,
+    "constraints": "h-bonds",
+    "constraint_algorithm": "LINCS",
+    "lincs_order": 4,
+    "lincs_warnangle": 30.0,
+    "continuation": "yes",
+    "gen_vel": "no",
+    "tcoupl": "V-rescale",
+    "tc_grps": "System",
+    "tau_t": 0.1,
+    "ref_t": 300.0,
+    "pcoupl": "C-rescale",
+    "pcoupltype": "isotropic",
+    "tau_p": 5.0,
+    "ref_p": 1.0,
+    "compressibility": 4.5e-5,
+    "define": "",
+    "nstlog": 500,
+    "nstenergy": 500,
+    "nstcalcenergy": 100,
+    "nstxout_compressed": 1000,
+}
+
+PRODUCTION_PARAMS: dict[str, Any] = {
+    "integrator": "md",
+    "dt": 0.002,
+    "nsteps": 250000,
+    "cutoff_scheme": "Verlet",
+    "nstlist": 20,
+    "pbc": "xyz",
+    "rlist": 1.221,
+    "coulombtype": "PME",
+    "rcoulomb": 1.2,
+    "fourierspacing": 0.16,
+    "pme_order": 4,
+    "ewald_rtol": 1e-5,
+    "vdwtype": "Cut-off",
+    "vdw_modifier": "Force-switch",
+    "rvdw_switch": 1.0,
+    "rvdw": 1.2,
+    "constraints": "h-bonds",
+    "constraint_algorithm": "LINCS",
+    "lincs_order": 4,
+    "lincs_warnangle": 30.0,
+    "continuation": "yes",
+    "gen_vel": "no",
+    "tcoupl": "V-rescale",
+    "tc_grps": "System",
+    "tau_t": 0.1,
+    "ref_t": 300.0,
+    "pcoupl": "C-rescale",
+    "pcoupltype": "isotropic",
+    "tau_p": 5.0,
+    "ref_p": 1.0,
+    "compressibility": 4.5e-5,
+    "define": "",
+    "nstlog": 500,
+    "nstenergy": 500,
+    "nstcalcenergy": 100,
+    "nstxout_compressed": 1000,
+}
+
 
 @pytest.fixture
 def visual_run_dir(request: pytest.FixtureRequest) -> Path:
@@ -126,17 +292,17 @@ def visual_run_dir(request: pytest.FixtureRequest) -> Path:
 def test_prepare_inputs_run_docking_parametrize_and_solvate_keeps_outputs(
     visual_run_dir: Path,
 ) -> None:
-    """Run docking, parametrize the docked complex, and solvate it.
+    """Run docking, solvation, minimization, equilibration, and production.
 
     This test is a workflow smoke test, not a detailed unit test of the docking,
-    parametrization, solvation, or BioSimSpace MD modules. The ligand starts
-    from SDF, the receptor starts from PDB, and the docking output is exported
-    back to SDF before it is passed into the parametrization entry point. The
-    parametrized GROMACS coordinate and topology files are then passed into the
-    OpenMM/ParmEd solvation bridge, where retained crystallographic waters are
-    restored before bulk solvent is added. We currently check only that each
-    bridge produces the expected files and that the solvated system can be
-    handed to the later MD helpers.
+    parametrization, solvation, or MD helper modules. The ligand starts from SDF,
+    the receptor starts from PDB, and the docking output is exported back to SDF
+    before it is passed into the parametrization entry point. The parametrized
+    complex is solvated with retained crystallographic waters restored before
+    bulk solvent placement, then loaded into BioSimSpace. The MD bridge runs the
+    exact six stage parameter blocks copied from the combined direct-GROMACS MD
+    runner: SD, CG, restrained NVT heating, restrained NPT, unrestrained NPT,
+    and production.
     """
     if shutil.which("vina") is None:
         pytest.skip("vina not available in PATH")
@@ -160,6 +326,20 @@ def test_prepare_inputs_run_docking_parametrize_and_solvate_keeps_outputs(
     solvation_dir = visual_run_dir / "solvation"
     restored_crystal_waters_pdb = solvation_dir / "restored_crystal_waters.pdb"
     solvation_dir.mkdir(parents=True, exist_ok=True)
+
+    sd_minimization_dir = visual_run_dir / "sd"
+    cg_minimization_dir = visual_run_dir / "cg"
+    nvt_restrained_dir = visual_run_dir / "nvt_res"
+    npt_restrained_dir = visual_run_dir / "npt_res"
+    npt_unrestrained_dir = visual_run_dir / "npt"
+    production_dir = visual_run_dir / "production"
+
+    sd_minimization_dir.mkdir(parents=True, exist_ok=True)
+    cg_minimization_dir.mkdir(parents=True, exist_ok=True)
+    nvt_restrained_dir.mkdir(parents=True, exist_ok=True)
+    npt_restrained_dir.mkdir(parents=True, exist_ok=True)
+    npt_unrestrained_dir.mkdir(parents=True, exist_ok=True)
+    production_dir.mkdir(parents=True, exist_ok=True)
 
     ligand_molecule = load_first_sdf_molecule(DOCKLIGAND_SDF, remove_hs=False)
 
@@ -253,3 +433,66 @@ def test_prepare_inputs_run_docking_parametrize_and_solvate_keeps_outputs(
     bss_system = solvated.load_bss()
 
     assert bss_system is not None
+
+    sd_minimized = run_minimization(
+        bss_system,
+        work_dir=sd_minimization_dir,
+        params=SD_PARAMS,
+    )
+
+    assert sd_minimized is not None
+    assert any(sd_minimization_dir.iterdir())
+
+    cg_minimized = run_minimization(
+        sd_minimized,
+        work_dir=cg_minimization_dir,
+        params=CG_PARAMS,
+    )
+
+    assert cg_minimized is not None
+    assert any(cg_minimization_dir.iterdir())
+
+    nvt_restrained = run_heating(
+        50 * BSS.Units.Time.picosecond,
+        cg_minimized,
+        work_dir=nvt_restrained_dir,
+        params=HEATING_PARAMS,
+        temperature_start=50 * BSS.Units.Temperature.kelvin,
+        temperature_end=300 * BSS.Units.Temperature.kelvin,
+        restraint="backbone",
+    )
+
+    assert nvt_restrained is not None
+    assert any(nvt_restrained_dir.iterdir())
+
+    npt_restrained = run_npt_equilibration(
+        100 * BSS.Units.Time.picosecond,
+        nvt_restrained,
+        work_dir=npt_restrained_dir,
+        params=NPT_RESTRAINED_PARAMS,
+        restraint="backbone",
+    )
+
+    assert npt_restrained is not None
+    assert any(npt_restrained_dir.iterdir())
+
+    npt_unrestrained = run_npt_equilibration(
+        100 * BSS.Units.Time.picosecond,
+        npt_restrained,
+        work_dir=npt_unrestrained_dir,
+        params=NPT_PARAMS,
+        restraint=None,
+    )
+
+    assert npt_unrestrained is not None
+    assert any(npt_unrestrained_dir.iterdir())
+
+    production = run_production(
+        500 * BSS.Units.Time.picosecond,
+        npt_unrestrained,
+        work_dir=production_dir,
+        params=PRODUCTION_PARAMS,
+    )
+
+    assert production is not None
+    assert any(production_dir.iterdir())

@@ -174,6 +174,7 @@ def _run_bss_protocol(
     *,
     ignore_warnings: bool = True,
     stage_name: str = "GROMACS stage",
+    max_time: int | None = None,
 ) -> sire.System:
     """Run a BioSimSpace GROMACS protocol with optional MDP overrides.
 
@@ -203,7 +204,7 @@ def _run_bss_protocol(
         process.setConfig(config)
 
     process.start()
-    process.wait()
+    process.wait(max_time=max_time)
 
     result = process.getSystem(block=True)
     if result is None:
@@ -218,6 +219,7 @@ def run_minimization(
     params: GromacsParams | Mapping[str, Any] | None = None,
     *,
     ignore_warnings: bool = True,
+    max_time: int | None = None,
 ) -> sire.System:
     """Run a BioSimSpace energy minimization.
 
@@ -253,6 +255,7 @@ def run_heating(
     restraint: str | None = "backbone",
     *,
     ignore_warnings: bool = True,
+    max_time: int | None = None,
 ) -> sire.System:
     """Run a BioSimSpace/GROMACS restrained or unrestrained NVT stage.
 
@@ -299,6 +302,7 @@ def run_npt_equilibration(
     restraint: str | None = "backbone",
     *,
     ignore_warnings: bool = True,
+    max_time: int | None = None,
 ) -> sire.System:
     """Run a BioSimSpace/GROMACS NPT equilibration procedure.
 
@@ -335,6 +339,7 @@ def run_production(
     params: GromacsParams | Mapping[str, Any] | None = None,
     *,
     ignore_warnings: bool = True,
+    max_time: int | None = None,
 ) -> sire.System:
     """Run a BioSimSpace production MD procedure.
 
