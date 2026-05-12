@@ -156,10 +156,7 @@ def _apply_gromacs_params_to_config(
     the local parameter model spell the same MDP key differently.
     """
     final_params: GromacsParams
-    if isinstance(params, GromacsParams):
-        final_params = params
-    else:
-        GromacsParams.from_mapping(params)
+    final_params = params if isinstance(params, GromacsParams) else GromacsParams.from_mapping(params)
 
     updated_config = list(config)
 
