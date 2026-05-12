@@ -1,5 +1,3 @@
-# src/gbsa_pipeline/parametrization.py
-
 """Parametrize protein-ligand complexes."""
 
 from __future__ import annotations

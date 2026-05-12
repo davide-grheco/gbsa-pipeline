@@ -1,5 +1,3 @@
-# src/gbsa_pipeline/change_defaults.py
-
 """Creating custom protocol with one setter per GROMACS parameter."""
 
 from __future__ import annotations
