@@ -134,31 +134,33 @@ def run_solvation(
     """Solvate a molecular system with BioSimSpace.
 
     This helper preserves the older BioSimSpace-based solvation entry point used
-    by existing tests and callers. New OpenMM/ParmEd solvation code can share
-    the same validated ``SolvationParams`` model without reintroducing string
-    coercion there. The helper imports BioSimSpace lazily so importing this
-    module remains cheap and does not require BioSimSpace until solvation is
-    actually requested. The returned object is whatever BioSimSpace returns for
-    the selected solvent model.
+    by existing tests and callers. Padding-based solvation is mapped to
+    BioSimSpace's ``shell`` argument, while explicit ``box_size`` values are
+    mapped to BioSimSpace box vectors. This avoids constructing boxes that are
+    accidentally too small for the input system. ``ion_conc`` is passed as a
+    plain molar float because BioSimSpace validates that value directly.
     """
     import BioSimSpace as BSS  # noqa: PLC0415
 
-    size_nm = params.box_size
-    if size_nm is None:
-        raise ValueError("BioSimSpace run_solvation requires params.box_size to be set.")
-
-    box, angles = _make_bss_box(BSS, params.shape, size_nm)
     solvent = _get_bss_solvent_function(BSS, params.water_model)
 
     kwargs: dict[str, Any] = {
         "molecule": system,
-        "box": box,
-        "angles": angles,
-        "is_neutralise": params.neutralize,
+        "is_neutral": params.neutralize,
     }
 
+    if params.padding is not None:
+        kwargs["shell"] = params.padding * BSS.Units.Length.nanometer
+    else:
+        if params.box_size is None:
+            raise ValueError("BioSimSpace run_solvation requires params.box_size when padding is None.")
+
+        box, angles = _make_bss_box(BSS, params.shape, params.box_size)
+        kwargs["box"] = box
+        kwargs["angles"] = angles
+
     if params.ion_concentration is not None:
-        kwargs["ion_conc"] = params.ion_concentration * BSS.Units.Concentration.molar
+        kwargs["ion_conc"] = params.ion_concentration
 
     if work_dir is not None:
         kwargs["work_dir"] = str(work_dir)
