@@ -99,8 +99,8 @@ def solvate_openmm(
 
     output_gro.parent.mkdir(parents=True, exist_ok=True)
 
-    water_model = _coerce_water_model(params.water_model)
-    box_shape = _coerce_box_shape(params.shape)
+    water_model = params.water_model
+    box_shape = params.shape
 
     # ------------------------------------------------------------------
     # 1. Reuse the in-memory ParmEd structure from parametrization.
@@ -244,37 +244,6 @@ def _restore_crystal_waters_before_solvation(
         atoms_after,
     )
     return output_pdb
-
-
-def _coerce_box_shape(shape: BoxShape | str) -> BoxShape:
-    """Return a validated box-shape enum.
-
-    ``SolvationParams`` normally validates this already, but this helper keeps
-    ``solvate_openmm`` robust for direct callers and tests that pass strings.
-    It intentionally mirrors the small coercion pattern used in
-    ``solvation_box.py`` instead of introducing a shared abstraction. Invalid
-    values should fail with the normal ``BoxShape`` error message.
-    """
-    if isinstance(shape, BoxShape):
-        return shape
-
-    return BoxShape(str(shape).lower().strip())
-
-
-def _coerce_water_model(model: WaterModel | str) -> WaterModel:
-    """Return a validated water-model enum.
-
-    ``SolvationParams`` normally validates this already, but keeping the
-    conversion local makes the OpenMM helper safe for direct use. The resulting
-    enum is used both to select the OpenMM XML file and to pass the model name
-    accepted by ``Modeller.addSolvent``. Unsupported values fail through the
-    ``WaterModel`` enum constructor. No model-specific chemistry is implemented
-    in this helper.
-    """
-    if isinstance(model, WaterModel):
-        return model
-
-    return WaterModel(str(model).lower().strip())
 
 
 def _remove_stale_file(path: Path) -> None:
