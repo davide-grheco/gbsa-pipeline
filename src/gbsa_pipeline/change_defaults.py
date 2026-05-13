@@ -35,7 +35,6 @@ from gbsa_pipeline.change_params import format_gmx_value
 
 logger = logging.getLogger(__name__)
 
-_EXTRA_INTEGRATORS = {"steep", "cg"}
 _FIELD_ALIASES = {
     "vdw_type": "vdwtype",
 }
@@ -56,31 +55,17 @@ def _normalise_field_name(key: str) -> str:
     return _FIELD_ALIASES.get(field_name, field_name)
 
 
-def _valid_integrator_values() -> set[str]:
-    """Return integrator names accepted by this parameter model.
-
-    The imported ``Integrator`` enum covers the MD-style integrators already
-    used by the original module. GROMACS minimization uses separate integrator
-    names, notably ``steep`` for steepest descent and ``cg`` for conjugate
-    gradient. They are accepted here without modifying the shared enum so this
-    module can support minimization parameter blocks with a small local change.
-    The returned values are lower-case strings matching the MDP file output.
-    """
-    enum_values = {item.value for item in Integrator}
-    return enum_values | _EXTRA_INTEGRATORS
-
-
 class GromacsParams(BaseModel):
     """MDP parameters with validated defaults and serialization helpers.
 
     The model is intentionally close to GROMACS MDP terminology because the
     rendered output is passed directly to ``BSS.Protocol.Custom``. Most fields
     use enums imported from ``change_defaults_enum`` so invalid common options
-    are rejected before a GROMACS process is started. The ``integrator`` field
-    also accepts ``steep`` and ``cg`` because those are GROMACS minimization
-    integrators and are not covered by the original MD-oriented enum. Optional
-    fields such as ``define`` and annealing settings are emitted only when the
-    caller supplies them, so the default MDP remains compact.
+    are rejected before a GROMACS process is started. The ``Integrator`` enum
+    includes both MD propagation integrators and minimization integrators such
+    as ``steep`` and ``cg``. Optional fields such as ``define`` and annealing
+    settings are emitted only when the caller supplies them, so the default MDP
+    remains compact.
     """
 
     model_config = ConfigDict(
@@ -89,7 +74,7 @@ class GromacsParams(BaseModel):
         extra="forbid",
     )
 
-    integrator: Integrator | str = Integrator.LEAP_FROG
+    integrator: Integrator = Integrator.LEAP_FROG
     tinit: float = 0.0
     dt: float = 0.001
     nsteps: int = 500
@@ -214,28 +199,6 @@ class GromacsParams(BaseModel):
 
         return normalised
 
-    @field_validator("integrator", mode="before")
-    @classmethod
-    def _check_integrator(cls, value: Integrator | str) -> Integrator | str:
-        """Validate MD and minimization integrator names.
-
-        The shared ``Integrator`` enum covers the MD-oriented values already
-        present in the project. GROMACS minimization requires additional string
-        values such as ``steep`` and ``cg``. This validator keeps those values
-        explicit and rejects arbitrary strings instead of weakening the field to
-        unvalidated text. Returned strings are lower-case so the rendered MDP
-        uses canonical GROMACS spelling.
-        """
-        if isinstance(value, Integrator):
-            return value
-
-        integrator = str(value).lower().strip()
-        if integrator not in _valid_integrator_values():
-            allowed = ", ".join(sorted(_valid_integrator_values()))
-            raise ValueError(f"Unsupported GROMACS integrator: {value}. Allowed values: {allowed}")
-
-        return integrator
-
     @field_validator("tcoupl", mode="before")
     @classmethod
     def _normalise_tcoupl(cls, value: Thermostat | str) -> Thermostat | str:
@@ -280,10 +243,10 @@ class GromacsParams(BaseModel):
         Most Python field names are converted by replacing underscores with
         hyphens, matching GROMACS MDP syntax. The ``vdwtype`` key is already in
         GROMACS spelling and is therefore emitted unchanged. Enum values are
-        serialized through their ``.value`` attribute, while minimization
-        integrators such as ``steep`` and ``cg`` remain plain strings. Fields
-        with value ``None`` are skipped so optional MDP parameters are emitted
-        only when explicitly requested.
+        serialized through their ``.value`` attribute. Fields with value
+        ``None`` are skipped so optional MDP parameters are emitted only when
+        explicitly requested. The returned mapping is suitable for MDP rendering
+        and for applying later validated overrides.
         """
         result = {}
 
@@ -361,11 +324,6 @@ class GromacsCustom(BSS.Protocol.Custom):
         super().__init__(mdp_path)
 
         self._parameters = self.params.to_mapping()
-
-
-# ============================================================================
-# Run helper
-# ============================================================================
 
 
 def run_gro_custom(
