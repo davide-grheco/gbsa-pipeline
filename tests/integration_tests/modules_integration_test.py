@@ -1,23 +1,19 @@
-"""Integration tests for visually inspectable module-level workflows.
+"""Integration tests for module-level workflow connectivity.
 
-This module intentionally keeps generated files on disk because the current
-development step requires manual inspection of docking and later MD artefacts.
-That is an exception to the normal test policy where runtime files should use
-``tmp_path`` and be discarded after the test run. The output directory is kept
-under ``tests/integration_tests/module_runs/`` so it is easy to inspect and easy
-to exclude from commits. Once the workflows are stable, these tests should move
-back to disposable runtime directories or become explicit manual smoke tests.
+This module exercises a full inspectable workflow across docking, ligand pose
+export, parametrization, OpenMM solvation, and staged BioSimSpace/GROMACS MD
+helpers. Runtime artefacts are written to pytest temporary directories so test
+runs do not leave generated files under the repository tree. The assertions are
+still smoke-level checks because detailed physical validation belongs in smaller
+module-specific tests or curated manual benchmark runs. The purpose here is to
+verify that the public module interfaces can still be connected end to end.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from typing import Any
-
 import shutil
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import BioSimSpace as BSS
 import pytest
@@ -44,12 +40,14 @@ from gbsa_pipeline.parametrization import (
 from gbsa_pipeline.solvation_box import SolvationParams
 from gbsa_pipeline.solvation_openmm import solvate_openmm
 
+if TYPE_CHECKING:
+    from typing import Any
+
+
 TESTDATA = Path(__file__).parents[1] / "testdata"
 DOCKING_TESTDATA = TESTDATA / "docking"
 DOCKLIGAND_SDF = DOCKING_TESTDATA / "dockligand.sdf"
 DOCKPROTEIN_PDB = DOCKING_TESTDATA / "dockprotein.pdb"
-
-MODULE_RUNS = Path(__file__).parent / "module_runs"
 
 MEEKO_RECEPTOR_BINARY = "mk_prepare_receptor.py"
 
@@ -61,7 +59,7 @@ DOCKPROTEIN_BOX = DockingBox(
 SD_PARAMS: dict[str, Any] = {
     "integrator": "steep",
     "nsteps": 50000,
-    "emtol": 1000.0,
+    "emtol": 300.0,
     "emstep": 0.001,
     "cutoff_scheme": "Verlet",
     "nstlist": 20,
@@ -273,24 +271,24 @@ PRODUCTION_PARAMS: dict[str, Any] = {
 
 
 @pytest.fixture
-def visual_run_dir(request: pytest.FixtureRequest) -> Path:
-    """Return a persistent output directory for one integration test.
+def module_run_dir(tmp_path: Path) -> Path:
+    """Return a disposable output directory for one module workflow test.
 
-    This fixture is intentionally not based on ``tmp_path`` because the current
-    module-integration work needs files to remain available after the test run.
-    The pytest node name is used as the directory name so each test has a stable
-    and inspectable output location. Existing files are not removed here,
-    because preserving artefacts is the point of this temporary test module.
-    The directory should be ignored by git and should not be committed.
+    The workflow writes many intermediate files from docking, parametrization,
+    solvation, and MD stages. Using ``tmp_path`` keeps those artefacts out of the
+    repository tree and avoids accidental commits of generated outputs. The
+    dedicated subdirectory keeps all products from this test under one inspectable
+    location during the pytest run. Pytest removes the directory according to its
+    normal temporary-directory policy.
     """
-    run_dir = MODULE_RUNS / request.node.name
+    run_dir = tmp_path / "module_run"
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
 
 
 @pytest.mark.integration
 def test_prepare_inputs_run_docking_parametrize_and_solvate_keeps_outputs(
-    visual_run_dir: Path,
+    module_run_dir: Path,
 ) -> None:
     """Run docking, solvation, minimization, equilibration, and production.
 
@@ -316,23 +314,23 @@ def test_prepare_inputs_run_docking_parametrize_and_solvate_keeps_outputs(
     if not DOCKPROTEIN_PDB.exists():
         pytest.skip(f"missing receptor test file: {DOCKPROTEIN_PDB}")
 
-    ligand_pdbqt = visual_run_dir / "dockligand.pdbqt"
-    receptor_pdbqt = visual_run_dir / "dockprotein.pdbqt"
-    docked_sdf = visual_run_dir / "dockligand_vina_out.sdf"
+    ligand_pdbqt = module_run_dir / "dockligand.pdbqt"
+    receptor_pdbqt = module_run_dir / "dockprotein.pdbqt"
+    docked_sdf = module_run_dir / "dockligand_vina_out.sdf"
 
-    parametrization_dir = visual_run_dir / "parametrization"
+    parametrization_dir = module_run_dir / "parametrization"
     crystal_waters_pdb = parametrization_dir / "crystal_waters.pdb"
 
-    solvation_dir = visual_run_dir / "solvation"
+    solvation_dir = module_run_dir / "solvation"
     restored_crystal_waters_pdb = solvation_dir / "restored_crystal_waters.pdb"
     solvation_dir.mkdir(parents=True, exist_ok=True)
 
-    sd_minimization_dir = visual_run_dir / "sd"
-    cg_minimization_dir = visual_run_dir / "cg"
-    nvt_restrained_dir = visual_run_dir / "nvt_res"
-    npt_restrained_dir = visual_run_dir / "npt_res"
-    npt_unrestrained_dir = visual_run_dir / "npt"
-    production_dir = visual_run_dir / "production"
+    sd_minimization_dir = module_run_dir / "sd"
+    cg_minimization_dir = module_run_dir / "cg"
+    nvt_restrained_dir = module_run_dir / "nvt_res"
+    npt_restrained_dir = module_run_dir / "npt_res"
+    npt_unrestrained_dir = module_run_dir / "npt"
+    production_dir = module_run_dir / "production"
 
     sd_minimization_dir.mkdir(parents=True, exist_ok=True)
     cg_minimization_dir.mkdir(parents=True, exist_ok=True)
@@ -367,13 +365,13 @@ def test_prepare_inputs_run_docking_parametrize_and_solvate_keeps_outputs(
         receptor=receptor_pdbqt,
         ligands=[ligand_pdbqt],
         box=DOCKPROTEIN_BOX,
-        workdir=visual_run_dir,
+        workdir=module_run_dir,
     )
 
     docking_result = engine.dock(request=request)
 
-    docking_output = visual_run_dir / "dockligand_vina_out.pdbqt"
-    docking_log = visual_run_dir / "dockligand_vina.log"
+    docking_output = module_run_dir / "dockligand_vina_out.pdbqt"
+    docking_log = module_run_dir / "dockligand_vina.log"
 
     assert docking_result.engine == "vina"
     assert len(docking_result.poses) == 1
