@@ -83,11 +83,12 @@ def test_solvation_real_protein_box_and_ions(tmp_path: Path) -> None:
     """Solvate a real protein test system and check box, waters, and ions.
 
     This test exercises the BioSimSpace compatibility entry point with typed
-    ``SolvationParams`` values. The parameter model now owns string parsing, but
-    integration code should preferably consume enum values directly. The test
-    keeps assertions coarse because exact water and ion counts can vary between
-    BioSimSpace/Sire versions. The important behavior is that a reasonable box,
-    water molecules, and ions are produced.
+    ``SolvationParams`` values. The compatibility helper constructs BioSimSpace
+    boxes from an explicit box size, so the test provides ``box_size`` instead
+    of relying on OpenMM-style padding. The assertions stay coarse because exact
+    water and ion counts can vary between BioSimSpace/Sire versions. The
+    important behavior is that a reasonable box, water molecules, and ions are
+    produced.
     """
     system = BSS.IO.readMolecules(
         files=[
