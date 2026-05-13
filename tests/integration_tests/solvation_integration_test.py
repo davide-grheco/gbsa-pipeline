@@ -1,3 +1,5 @@
+"""Integration tests for the BioSimSpace solvation compatibility helper."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -5,13 +7,27 @@ from typing import TYPE_CHECKING
 import BioSimSpace as BSS
 import pytest
 
-from gbsa_pipeline.solvation_box import SolvationParams, WaterModel, run_solvation
+from gbsa_pipeline.solvation_box import (
+    BoxShape,
+    SolvationParams,
+    WaterModel,
+    run_solvation,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from pathlib import Path
 
 
 def _molecule_names(system: BSS._SireWrappers.System) -> Iterable[str]:
+    """Yield molecule names from a BioSimSpace system.
+
+    BioSimSpace and Sire wrappers expose names through slightly different
+    methods depending on the object type and version. This helper keeps that
+    compatibility handling local to the test module. It is useful for debugging
+    failures without making the test assertions depend on one exact wrapper API.
+    Unknown objects fall back to their string representation.
+    """
     for mol in system:
         if hasattr(mol, "getName"):
             yield mol.getName()
@@ -22,10 +38,18 @@ def _molecule_names(system: BSS._SireWrappers.System) -> Iterable[str]:
 
 
 def _is_ion(mol: BSS._SireWrappers.Molecule) -> bool:
+    """Return whether a BioSimSpace molecule looks like an ion.
+
+    Some BioSimSpace versions expose ``isIon`` directly, while others require a
+    more defensive check in tests. Single-atom molecules are treated as likely
+    ions because this integration test only uses a small solvated protein system.
+    The name fallback catches common sodium, chloride, potassium, and calcium
+    representations. The heuristic is intentionally test-local and should not be
+    used as production chemistry logic.
+    """
     if hasattr(mol, "isIon"):
         return bool(mol.isIon())
 
-    # Heuristic: single-atom molecules are treated as ions; otherwise check names.
     if hasattr(mol, "nAtoms") and mol.nAtoms() == 1:
         return True
 
@@ -36,6 +60,14 @@ def _is_ion(mol: BSS._SireWrappers.Molecule) -> bool:
 def _ion_molecules(
     system: BSS._SireWrappers.System,
 ) -> list[BSS._SireWrappers.Molecule]:
+    """Return ion-like molecules from a BioSimSpace system.
+
+    The preferred path uses BioSimSpace's own ``getIonMolecules`` method when it
+    is available. Some wrapper versions return objects that are not directly
+    list-convertible, so the helper falls back safely. If the method is absent,
+    the local test heuristic is used instead. This keeps version-specific API
+    handling out of the actual assertions.
+    """
     if hasattr(system, "getIonMolecules"):
         ions = system.getIonMolecules()
         try:
@@ -47,7 +79,16 @@ def _ion_molecules(
 
 
 @pytest.mark.integration
-def test_solvation_real_protein_box_and_ions(tmp_path: pytest.TempPathFactory) -> None:
+def test_solvation_real_protein_box_and_ions(tmp_path: Path) -> None:
+    """Solvate a real protein test system and check box, waters, and ions.
+
+    This test exercises the BioSimSpace compatibility entry point with typed
+    ``SolvationParams`` values. The parameter model now owns string parsing, but
+    integration code should preferably consume enum values directly. The test
+    keeps assertions coarse because exact water and ion counts can vary between
+    BioSimSpace/Sire versions. The important behavior is that a reasonable box,
+    water molecules, and ions are produced.
+    """
     system = BSS.IO.readMolecules(
         files=[
             "tests/testdata/test.gro",
@@ -58,14 +99,15 @@ def test_solvation_real_protein_box_and_ions(tmp_path: pytest.TempPathFactory) -
 
     params = SolvationParams(
         water_model=WaterModel.TIP3P,
+        shape=BoxShape.CUBIC,
         padding=1.5,
+        box_size=None,
         ion_concentration=0.1,
         neutralize=True,
     )
 
-    solvated = run_solvation(system=system, params=params)
+    solvated = run_solvation(system=system, params=params, work_dir=tmp_path)
 
-    # Box dimensions (Angstrom) -> ensure padding applied and reasonable size
     dims = solvated._sire_object.property("space").dimensions()
     dims_nm = [dim.value() / 10 for dim in dims]
     assert all(val > 3.0 for val in dims_nm)
@@ -78,9 +120,16 @@ def test_solvation_real_protein_box_and_ions(tmp_path: pytest.TempPathFactory) -
 
 
 @pytest.mark.integration
-def test_solvation_real_protein_without_neutralisation(
-    tmp_path: pytest.TempPathFactory,
-) -> None:
+def test_solvation_real_protein_without_neutralisation(tmp_path: Path) -> None:
+    """Solvate a real protein test system without requested neutralisation.
+
+    This test keeps the previous behavior where ion detection is used only as a
+    compatibility check, not as a strict count assertion. BioSimSpace may still
+    add ions depending on solvent settings and backend behavior. The purpose is
+    to verify that the wrapper accepts validated parameters and produces water
+    molecules. A temporary work directory is passed explicitly so generated
+    files do not leak into the repository tree.
+    """
     system = BSS.IO.readMolecules(
         files=[
             "tests/testdata/test.gro",
@@ -93,14 +142,16 @@ def test_solvation_real_protein_without_neutralisation(
 
     params = SolvationParams(
         water_model=WaterModel.TIP3P,
+        shape=BoxShape.CUBIC,
         padding=1.0,
+        box_size=None,
         ion_concentration=0.0,
         neutralize=False,
     )
 
-    solvated = run_solvation(system=system, params=params)
+    solvated = run_solvation(system=system, params=params, work_dir=tmp_path)
 
     water_mols = solvated.getWaterMolecules()
     assert water_mols.nMolecules() > 0
 
-    _ion_molecules(solvated)  # ensure callable; no strict assertion because solvate may add ions
+    _ion_molecules(solvated)
