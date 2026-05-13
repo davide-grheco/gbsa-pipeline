@@ -4,12 +4,22 @@ from enum import StrEnum
 
 
 class Integrator(StrEnum):
-    """Integration algorithm for time propagation of equations of motion."""
+    """Integration algorithm for time propagation or minimization.
+
+    The enum values are the strings written to GROMACS MDP files. Standard MD
+    propagation uses values such as ``md`` and ``md-vv``. Energy minimization
+    stages use ``steep`` for steepest descent and ``cg`` for conjugate-gradient
+    minimization. Keeping all accepted integrators in this enum lets Pydantic
+    validate the field directly without a custom string validator in the
+    parameter model.
+    """
 
     LEAP_FROG = "md"
     VELOCITY_VERLET = "md-vv"
     LEAP_FROG_STOCHASTIC = "sd"
     LANGEVIN = "bd"
+    STEEP = "steep"
+    CONJUGATE_GRADIENT = "cg"
 
 
 class CommMode(StrEnum):
