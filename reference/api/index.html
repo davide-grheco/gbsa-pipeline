@@ -2469,10 +2469,10 @@ ParametrizationConfig.amber14_gaff2_nagl()  # preset with NAGL charges</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/parametrization.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">70</span>
-<span class="normal">71</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">71</span>
 <span class="normal">72</span>
-<span class="normal">73</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="normal">73</span>
+<span class="normal">74</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">amber14_gaff2</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ParametrizationConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;AMBER ff14SB + GAFF2 + AM1-BCC charges (default).&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">protein_ff</span><span class="o">=</span><span class="n">ProteinFF</span><span class="o">.</span><span class="n">FF14SB</span><span class="p">,</span> <span class="n">charge_method</span><span class="o">=</span><span class="n">ChargeMethod</span><span class="o">.</span><span class="n">AM1BCC</span><span class="p">)</span>
@@ -2505,10 +2505,10 @@ ParametrizationConfig.amber14_gaff2_nagl()  # preset with NAGL charges</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/parametrization.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">80</span>
-<span class="normal">81</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">81</span>
 <span class="normal">82</span>
-<span class="normal">83</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="normal">83</span>
+<span class="normal">84</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">amber14_gaff2_nagl</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ParametrizationConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;AMBER ff14SB + GAFF2 + NAGL graph-neural-network charges.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">charge_method</span><span class="o">=</span><span class="n">ChargeMethod</span><span class="o">.</span><span class="n">NAGL</span><span class="p">)</span>
@@ -2541,10 +2541,10 @@ ParametrizationConfig.amber14_gaff2_nagl()  # preset with NAGL charges</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/parametrization.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">75</span>
-<span class="normal">76</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">76</span>
 <span class="normal">77</span>
-<span class="normal">78</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="normal">78</span>
+<span class="normal">79</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">amber19_gaff2</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ParametrizationConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;AMBER ff19SB + GAFF2 + AM1-BCC charges.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">protein_ff</span><span class="o">=</span><span class="n">ProteinFF</span><span class="o">.</span><span class="n">FF19SB</span><span class="p">,</span> <span class="n">charge_method</span><span class="o">=</span><span class="n">ChargeMethod</span><span class="o">.</span><span class="n">AM1BCC</span><span class="p">)</span>
@@ -2995,13 +2995,7 @@ this object is often used after long integration-test runs.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/solvation_openmm.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 94</span>
-<span class="normal"> 95</span>
-<span class="normal"> 96</span>
-<span class="normal"> 97</span>
-<span class="normal"> 98</span>
-<span class="normal"> 99</span>
-<span class="normal">100</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">100</span>
 <span class="normal">101</span>
 <span class="normal">102</span>
 <span class="normal">103</span>
@@ -3009,7 +3003,13 @@ this object is often used after long integration-test runs.</p>
 <span class="normal">105</span>
 <span class="normal">106</span>
 <span class="normal">107</span>
-<span class="normal">108</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_bss</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="normal">108</span>
+<span class="normal">109</span>
+<span class="normal">110</span>
+<span class="normal">111</span>
+<span class="normal">112</span>
+<span class="normal">113</span>
+<span class="normal">114</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_bss</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Load this complex as a BioSimSpace System for MD stages.</span>
 
 <span class="sd">    Reads from the GROMACS files already written to disk. The returned</span>
@@ -3338,8 +3338,7 @@ AM1-BCC via sqm). The system is exported to GROMACS <code>.gro</code> and
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/parametrization.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">177</span>
-<span class="normal">178</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">178</span>
 <span class="normal">179</span>
 <span class="normal">180</span>
 <span class="normal">181</span>
@@ -3359,7 +3358,8 @@ AM1-BCC via sqm). The system is exported to GROMACS <code>.gro</code> and
 <span class="normal">195</span>
 <span class="normal">196</span>
 <span class="normal">197</span>
-<span class="normal">198</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">parametrize</span><span class="p">(</span><span class="n">inp</span><span class="p">:</span> <span class="n">ParametrizationInput</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ParametrisedComplex</span><span class="p">:</span>
+<span class="normal">198</span>
+<span class="normal">199</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">parametrize</span><span class="p">(</span><span class="n">inp</span><span class="p">:</span> <span class="n">ParametrizationInput</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ParametrisedComplex</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Parametrize a protein-ligand complex without running tleap.</span>
 
 <span class="sd">    Uses OpenMM force field XML files for the protein and</span>
@@ -3589,13 +3589,7 @@ returns a small object carrying the paths and in-memory ParmEd structure.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/solvation_openmm.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">111</span>
-<span class="normal">112</span>
-<span class="normal">113</span>
-<span class="normal">114</span>
-<span class="normal">115</span>
-<span class="normal">116</span>
-<span class="normal">117</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">117</span>
 <span class="normal">118</span>
 <span class="normal">119</span>
 <span class="normal">120</span>
@@ -3707,7 +3701,13 @@ returns a small object carrying the paths and in-memory ParmEd structure.</p>
 <span class="normal">226</span>
 <span class="normal">227</span>
 <span class="normal">228</span>
-<span class="normal">229</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">solvate_openmm</span><span class="p">(</span>
+<span class="normal">229</span>
+<span class="normal">230</span>
+<span class="normal">231</span>
+<span class="normal">232</span>
+<span class="normal">233</span>
+<span class="normal">234</span>
+<span class="normal">235</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">solvate_openmm</span><span class="p">(</span>
     <span class="n">parametrized</span><span class="p">:</span> <span class="n">ParametrisedComplex</span><span class="p">,</span>
     <span class="n">params</span><span class="p">:</span> <span class="n">SolvationParams</span><span class="p">,</span>
     <span class="n">output_gro</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
