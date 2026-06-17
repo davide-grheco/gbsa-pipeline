@@ -8,6 +8,7 @@ import warnings
 from typing import TYPE_CHECKING
 
 import gemmi
+import networkx as nx
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -280,14 +281,13 @@ def _strip_mol2_dipeptide_caps_parmed(
             ]
             if a is not None
         }
-        mol2_depth: dict[int, int] = {backbone_ca.idx: 0}
-        bfs_q = [backbone_ca]
-        while bfs_q:
-            node = bfs_q.pop(0)
-            for nb in adj_pmd[node.idx]:
-                if nb.idx not in mol2_depth and nb.idx not in cap_idx:
-                    mol2_depth[nb.idx] = mol2_depth[node.idx] + 1
-                    bfs_q.append(nb)
+        graph_core = nx.Graph()
+        graph_core.add_edges_from(
+            (b.atom1.idx, b.atom2.idx)
+            for b in structure.bonds
+            if b.atom1.idx not in cap_idx and b.atom2.idx not in cap_idx
+        )
+        mol2_depth: dict[int, int] = dict(nx.single_source_shortest_path_length(graph_core, backbone_ca.idx))
 
         sc_by_elem_depth: dict[tuple[str, int], list[pmd.Atom]] = {}
         for atom in structure.atoms:
@@ -382,6 +382,8 @@ def _strip_mol2_dipeptide_caps_text(
         adj[a1].append(a2)
         adj[a2].append(a1)
 
+    graph = nx.Graph(adj)
+
     # Identify backbone N bonded to ACE cap carbonyl C.
     backbone_n_id = None
     ace_cap_c_id = None
@@ -405,17 +407,10 @@ def _strip_mol2_dipeptide_caps_text(
     if backbone_n_id is None or ace_cap_c_id is None:
         raise ValueError(f"Could not identify backbone N in {mol2_path}. Expected a capped dipeptide (ACE-RES-NME).")
 
-    # BFS to collect ACE cap atoms.
-    ace_atoms: set[int] = set()
-    queue = [ace_cap_c_id]
-    while queue:
-        node = queue.pop()
-        if node in ace_atoms or node == backbone_n_id:
-            continue
-        ace_atoms.add(node)
-        for nb in adj[node]:
-            if nb not in ace_atoms and nb != backbone_n_id:
-                queue.append(nb)
+    # Collect ACE cap atoms: all nodes reachable from ace_cap_c_id without crossing backbone_n_id.
+    graph_ace = graph.copy()
+    graph_ace.remove_node(backbone_n_id)
+    ace_atoms: set[int] = nx.node_connected_component(graph_ace, ace_cap_c_id)
 
     backbone_ca_id = next(
         (nb for nb in adj[backbone_n_id] if nb not in ace_atoms and atoms[nb]["type"].lower() == "c3"),
@@ -448,15 +443,9 @@ def _strip_mol2_dipeptide_caps_text(
     )
     nme_atoms: set[int] = set()
     if nme_cap_n_id is not None:
-        queue = [nme_cap_n_id]
-        while queue:
-            node = queue.pop()
-            if node in nme_atoms or node == backbone_c_id:
-                continue
-            nme_atoms.add(node)
-            for nb in adj[node]:
-                if nb not in nme_atoms and nb != backbone_c_id:
-                    queue.append(nb)
+        graph_nme = graph.copy()
+        graph_nme.remove_node(backbone_c_id)
+        nme_atoms = nx.node_connected_component(graph_nme, nme_cap_n_id)
 
     cap_atoms = ace_atoms | nme_atoms
     core_ids = [aid for aid in sorted(atoms) if aid not in cap_atoms]
@@ -508,14 +497,9 @@ def _strip_mol2_dipeptide_caps_text(
             pdb_names_by_depth = _pdb_sidechain_names_by_depth(protein_pdb, resname)
 
     if pdb_names_by_depth:
-        mol2_depth: dict[int, int] = {backbone_ca_id: 0}
-        bfs_queue = [backbone_ca_id]
-        while bfs_queue:
-            node = bfs_queue.pop(0)
-            for nb in adj[node]:
-                if nb not in mol2_depth and nb not in cap_atoms:
-                    mol2_depth[nb] = mol2_depth[node] + 1
-                    bfs_queue.append(nb)
+        mol2_depth: dict[int, int] = dict(
+            nx.single_source_shortest_path_length(graph.subgraph(core_ids), backbone_ca_id)
+        )
 
         sc_atoms_by_elem_depth: dict[tuple[str, int], list[int]] = {}
         already_named = set(rename)
