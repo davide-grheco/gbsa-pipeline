@@ -256,7 +256,10 @@ def _strip_mol2_dipeptide_caps(
         hb.name = f"HB{i}"
         hb.type = _AMBER_BACKBONE_TYPE["backbone_HB"]
 
-    resname = structure.residues[0].name.strip() if structure.residues else "UNK"
+    resname = next(
+        (r.name.strip() for r in structure.residues if r.name.upper() not in {"ACE", "NME"}),
+        "UNK",
+    )
     pdb_names_by_depth: dict[tuple[str, int], list[str]] = {}
     if protein_pdb is not None:
         with contextlib.suppress(Exception):

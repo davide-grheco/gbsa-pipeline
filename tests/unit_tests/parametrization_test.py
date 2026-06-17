@@ -409,6 +409,102 @@ def test_strip_mol2_dipeptide_caps_no_ace_raises(tmp_path: Path) -> None:
         _strip_mol2_dipeptide_caps(mol2, out)
 
 
+# ACE-SER-NME capped dipeptide in GAFF types with an OG sidechain atom.
+# SER has 11 heavy+H atoms (vs 10 for ALA): same backbone but CB carries OG+HG
+# instead of a third HB.  Used to test sidechain renaming from a reference PDB.
+_ACE_SER_NME_MOL2 = """\
+@<TRIPOS>MOLECULE
+SER
+   23    22     3     0     0
+SMALL
+RESP Charge
+
+
+@<TRIPOS>ATOM
+      1 C1       -2.0000   0.0000   0.0000 c3        1 ACE      0.1160
+      2 C2       -1.0000   0.0000   0.0000 c         1 ACE      0.5970
+      3 O3       -1.0000   1.0000   0.0000 o         1 ACE     -0.5680
+      4 H4       -2.0000   1.0000   0.0000 h1        1 ACE      0.1010
+      5 H5       -2.0000  -1.0000   0.0000 h1        1 ACE      0.1010
+      6 H6       -3.0000   0.0000   0.0000 h1        1 ACE      0.1010
+      7 N7        0.0000   0.0000   0.0000 n         2 SER     -0.4160
+      8 H8        0.0000   1.0000   0.0000 hn        2 SER      0.2730
+      9 C9        1.0000   0.0000   0.0000 c3        2 SER      0.0340
+     10 H10       1.0000   1.0000   0.0000 h1        2 SER      0.0820
+     11 C11       1.0000   0.0000   1.0000 c3        2 SER     -0.0316
+     12 H12       0.0000   0.0000   1.0000 hc        2 SER      0.0642
+     13 H13       1.0000   1.0000   1.0000 hc        2 SER      0.0642
+     14 O14       2.0000   0.0000   1.0000 oh        2 SER     -0.6541
+     15 H15       3.0000   0.0000   1.0000 ho        2 SER      0.4275
+     16 C16       2.0000   0.0000   0.0000 c         2 SER      0.5973
+     17 O17       2.0000   1.0000   0.0000 o         2 SER     -0.5679
+     18 N18       3.0000   0.0000   0.0000 n         3 NME     -0.4157
+     19 H19       3.0000   1.0000   0.0000 hn        3 NME      0.2719
+     20 C20       4.0000   0.0000   0.0000 c3        3 NME      0.1135
+     21 H21       5.0000   0.0000   0.0000 hc        3 NME      0.0965
+     22 H22       4.0000   1.0000   0.0000 hc        3 NME      0.0965
+     23 H23       4.0000  -1.0000   0.0000 hc        3 NME      0.0965
+@<TRIPOS>BOND
+     1     1     2 1
+     2     2     3 2
+     3     1     4 1
+     4     1     5 1
+     5     1     6 1
+     6     2     7 am
+     7     7     8 1
+     8     7     9 1
+     9     9    10 1
+    10     9    11 1
+    11    11    12 1
+    12    11    13 1
+    13    11    14 1
+    14    14    15 1
+    15     9    16 1
+    16    16    17 2
+    17    16    18 am
+    18    18    19 1
+    19    18    20 1
+    20    20    21 1
+    21    20    22 1
+    22    20    23 1
+@<TRIPOS>SUBSTRUCTURE
+     1 ACE         1 TEMP              0 ****  ****    0 ROOT
+     2 SER         7 TEMP              0 ****  ****    0 ROOT
+     3 NME        18 TEMP              0 ****  ****    0 ROOT
+"""
+
+# Minimal PDB with a SER residue.  OG is the sidechain atom the function should
+# rename (depth 2 from CA: CA→CB→OG).
+_SER_PDB = """\
+ATOM      1  N   SER A   1       0.000   0.000   0.000  1.00  0.00           N
+ATOM      2  CA  SER A   1       1.000   0.000   0.000  1.00  0.00           C
+ATOM      3  C   SER A   1       2.000   0.000   0.000  1.00  0.00           C
+ATOM      4  O   SER A   1       2.000   1.000   0.000  1.00  0.00           O
+ATOM      5  CB  SER A   1       1.000   1.000   0.000  1.00  0.00           C
+ATOM      6  OG  SER A   1       0.000   2.000   0.000  1.00  0.00           O
+END
+"""
+
+
+def test_strip_mol2_dipeptide_caps_renames_sidechain_from_pdb(tmp_path: Path) -> None:
+    """Sidechain atoms are renamed to match PDB atom names when protein_pdb is given.
+
+    The OG oxygen in the SER mol2 is a sidechain atom (depth 2 from CA via CB).
+    When a reference PDB containing SER is provided, OG should be renamed from its
+    GAFF mol2 name ("O14") to the AMBER/PDB name ("OG").
+    """
+    mol2 = tmp_path / "ace_ser_nme.mol2"
+    out = tmp_path / "stripped.mol2"
+    mol2.write_text(_ACE_SER_NME_MOL2, encoding="utf-8")
+    pdb = tmp_path / "ser.pdb"
+    pdb.write_text(_SER_PDB, encoding="utf-8")
+
+    _strip_mol2_dipeptide_caps(mol2, out, protein_pdb=pdb)
+
+    names = _mol2_atom_names(out.read_text(encoding="utf-8"))
+    assert "OG" in names
+
+
 # ---------------------------------------------------------------------------
 # _strip_mol2_or_original tests
 # ---------------------------------------------------------------------------
