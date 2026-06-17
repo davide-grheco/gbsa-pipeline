@@ -16,10 +16,7 @@ import parmed as pmd
 
 logger = logging.getLogger(__name__)
 
-THREE_CHAR_ATOM_NAME_LENGTH = 3
 MIN_GREEK_ATOM_NAME_LENGTH = 2
-MIN_PDBQT_ATOM_FIELDS = 9
-MIN_PDBQT_BOND_FIELDS = 4
 
 # GAFF nitrogen and carbon atom type sets, used to detect ACE/NME cap atoms.
 _GAFF_N_TYPES = {
@@ -157,12 +154,16 @@ def _gaff_type_to_element(gaff_type: str) -> str:
     return t[0].upper()
 
 
-def _strip_mol2_dipeptide_caps_parmed(
+def _strip_mol2_dipeptide_caps(
     mol2_path: Path,
     output_mol2: Path,
     protein_pdb: Path | None = None,
 ) -> Path:
-    """ParmEd-based cap stripping: load mol2, rename backbone atoms, strip ACE/NME, save."""
+    """Strip ACE/NME caps from a capped-dipeptide mol2 and rename backbone atoms.
+
+    Raises ``ValueError`` when no ACE residue is found, so callers that process
+    bare residue templates (e.g. MCPB.py CS1-4 files) can fall back gracefully.
+    """
     structure = pmd.load_file(str(mol2_path), structure=True)
 
     res_names = {r.name.upper() for r in structure.residues}
@@ -306,253 +307,6 @@ def _strip_mol2_dipeptide_caps_parmed(
     structure.strip(":ACE,NME")  # noqa: B005
     output_mol2.parent.mkdir(parents=True, exist_ok=True)
     structure.save(str(output_mol2), format="mol2", overwrite=True)
-    return output_mol2
-
-
-def _strip_mol2_dipeptide_caps(
-    mol2_path: Path,
-    output_mol2: Path,
-    protein_pdb: Path | None = None,
-) -> Path:
-    """Strip ACE/NME caps from a capped-dipeptide mol2, trying ParmEd first.
-
-    Falls back to raw-text parsing when ParmEd cannot read the GAFF mol2 variant.
-    """
-    try:
-        return _strip_mol2_dipeptide_caps_parmed(mol2_path, output_mol2, protein_pdb)
-    except (OSError, ValueError, RuntimeError, AttributeError) as exc:
-        logger.warning(
-            "ParmEd cap stripping failed for %s; falling back to text-based stripping: %s",
-            mol2_path,
-            exc,
-        )
-        return _strip_mol2_dipeptide_caps_text(mol2_path, output_mol2, protein_pdb)
-
-
-def _strip_mol2_dipeptide_caps_text(
-    mol2_path: Path,
-    output_mol2: Path,
-    protein_pdb: Path | None = None,
-) -> Path:
-    """Strip ACE/NME caps from a capped-dipeptide mol2 and rename backbone atoms.
-
-    RESP charges are often derived on ACE-RES-NME capped dipeptides. This
-    function removes the cap atoms and renames backbone atoms (N, CA, CB, C, O)
-    to AMBER ff14SB convention so the mol2 can serve as an embedded residue
-    template for tleap. Mol2 files that are already residue templates (e.g.
-    CS1-4 from MCPB.py) will raise ValueError (no ACE cap found), and the
-    caller should fall back to using the original mol2 unchanged.
-    """
-    text = mol2_path.read_text()
-    sections: dict[str, list[str]] = {}
-    current = None
-    for line in text.splitlines():
-        if line.startswith("@<TRIPOS>"):
-            current = line[9:].strip()
-            sections[current] = []
-        elif current is not None:
-            sections[current].append(line)
-
-    atoms: dict[int, dict] = {}
-    for line in sections.get("ATOM", []):
-        parts = line.split()
-        if len(parts) < MIN_PDBQT_ATOM_FIELDS:
-            continue
-        aid = int(parts[0])
-        atoms[aid] = {
-            "id": aid,
-            "name": parts[1],
-            "x": parts[2],
-            "y": parts[3],
-            "z": parts[4],
-            "type": parts[5],
-            "subst_id": parts[6],
-            "subst_name": parts[7],
-            "charge": parts[8],
-        }
-
-    bonds: list[tuple[int, int, str]] = []
-    adj: dict[int, list[int]] = {a: [] for a in atoms}
-    for line in sections.get("BOND", []):
-        parts = line.split()
-        if len(parts) < MIN_PDBQT_BOND_FIELDS:
-            continue
-        a1, a2, bt = int(parts[1]), int(parts[2]), parts[3]
-        bonds.append((a1, a2, bt))
-        adj[a1].append(a2)
-        adj[a2].append(a1)
-
-    graph = nx.Graph(adj)
-
-    # Identify backbone N bonded to ACE cap carbonyl C.
-    backbone_n_id = None
-    ace_cap_c_id = None
-    for aid, atom in atoms.items():
-        if atom["type"].lower() not in _GAFF_N_TYPES:
-            continue
-        for nb in adj[aid]:
-            nb_atom = atoms[nb]
-            if nb_atom["type"].lower() not in _GAFF_C_TYPES:
-                continue
-            nb_neighbors = adj[nb]
-            has_o = any(atoms[x]["type"].lower() == "o" for x in nb_neighbors if x != aid)
-            has_methyl = any(atoms[x]["type"].lower() == "c3" for x in nb_neighbors if x != aid)
-            if has_o and has_methyl:
-                backbone_n_id = aid
-                ace_cap_c_id = nb
-                break
-        if backbone_n_id is not None:
-            break
-
-    if backbone_n_id is None or ace_cap_c_id is None:
-        raise ValueError(f"Could not identify backbone N in {mol2_path}. Expected a capped dipeptide (ACE-RES-NME).")
-
-    # Collect ACE cap atoms: all nodes reachable from ace_cap_c_id without crossing backbone_n_id.
-    graph_ace = graph.copy()
-    graph_ace.remove_node(backbone_n_id)
-    ace_atoms: set[int] = nx.node_connected_component(graph_ace, ace_cap_c_id)
-
-    backbone_ca_id = next(
-        (nb for nb in adj[backbone_n_id] if nb not in ace_atoms and atoms[nb]["type"].lower() == "c3"),
-        None,
-    )
-    if backbone_ca_id is None:
-        raise ValueError(f"Could not identify backbone CA in {mol2_path}.")
-
-    backbone_c_id = None
-    backbone_o_id = None
-    for nb in adj[backbone_ca_id]:
-        if nb == backbone_n_id or nb in ace_atoms:
-            continue
-        if atoms[nb]["type"].lower() in _GAFF_C_TYPES and atoms[nb]["type"].lower() != "c3":
-            o_neighbors = [x for x in adj[nb] if atoms[x]["type"].lower() == "o" and x != backbone_ca_id]
-            if o_neighbors:
-                backbone_c_id = nb
-                backbone_o_id = o_neighbors[0]
-                break
-    if backbone_c_id is None or backbone_o_id is None:
-        raise ValueError(f"Could not identify backbone C in {mol2_path}.")
-
-    nme_cap_n_id = next(
-        (
-            nb
-            for nb in adj[backbone_c_id]
-            if nb not in (backbone_ca_id, backbone_o_id) and atoms[nb]["type"].lower() in _GAFF_N_TYPES
-        ),
-        None,
-    )
-    nme_atoms: set[int] = set()
-    if nme_cap_n_id is not None:
-        graph_nme = graph.copy()
-        graph_nme.remove_node(backbone_c_id)
-        nme_atoms = nx.node_connected_component(graph_nme, nme_cap_n_id)
-
-    cap_atoms = ace_atoms | nme_atoms
-    core_ids = [aid for aid in sorted(atoms) if aid not in cap_atoms]
-
-    backbone_ha_id = next(
-        (nb for nb in adj[backbone_ca_id] if atoms[nb]["type"].lower() == "h1" and nb not in cap_atoms),
-        None,
-    )
-    backbone_h_id = next(
-        (nb for nb in adj[backbone_n_id] if atoms[nb]["type"].lower() in {"hn", "h"} and nb not in cap_atoms),
-        None,
-    )
-    backbone_cb_id = next(
-        (
-            nb
-            for nb in adj[backbone_ca_id]
-            if nb not in (backbone_n_id, backbone_c_id)
-            and nb not in cap_atoms
-            and atoms[nb]["type"].lower() == "c3"
-            and nb != backbone_ha_id
-        ),
-        None,
-    )
-    backbone_hb_ids: list[int] = []
-    if backbone_cb_id is not None:
-        backbone_hb_ids = [
-            nb for nb in adj[backbone_cb_id] if atoms[nb]["type"].lower() in {"h1", "hc", "hx"} and nb not in cap_atoms
-        ]
-
-    rename: dict[int, tuple[str, str]] = {}
-    rename[backbone_n_id] = ("N", _AMBER_BACKBONE_TYPE["backbone_N"])
-    if backbone_h_id:
-        rename[backbone_h_id] = ("H", _AMBER_BACKBONE_TYPE["backbone_H"])
-    rename[backbone_ca_id] = ("CA", _AMBER_BACKBONE_TYPE["backbone_CA"])
-    if backbone_ha_id:
-        rename[backbone_ha_id] = ("HA", _AMBER_BACKBONE_TYPE["backbone_HA"])
-    rename[backbone_c_id] = ("C", _AMBER_BACKBONE_TYPE["backbone_C"])
-    rename[backbone_o_id] = ("O", _AMBER_BACKBONE_TYPE["backbone_O"])
-    if backbone_cb_id:
-        rename[backbone_cb_id] = ("CB", _AMBER_BACKBONE_TYPE["backbone_CB"])
-    for i, hb_id in enumerate(backbone_hb_ids, start=2):
-        rename[hb_id] = (f"HB{i}", _AMBER_BACKBONE_TYPE["backbone_HB"])
-
-    mol_name = sections.get("MOLECULE", ["UNK"])[0].strip() if sections.get("MOLECULE") else "UNK"
-    resname = mol_name.strip()
-    pdb_names_by_depth: dict[tuple[str, int], list[str]] = {}
-    if protein_pdb is not None:
-        with contextlib.suppress(Exception):
-            pdb_names_by_depth = _pdb_sidechain_names_by_depth(protein_pdb, resname)
-
-    if pdb_names_by_depth:
-        mol2_depth: dict[int, int] = dict(
-            nx.single_source_shortest_path_length(graph.subgraph(core_ids), backbone_ca_id)
-        )
-
-        sc_atoms_by_elem_depth: dict[tuple[str, int], list[int]] = {}
-        already_named = set(rename)
-        for aid in core_ids:
-            if aid in already_named:
-                continue
-            atom = atoms[aid]
-            elem = _gaff_type_to_element(atom["type"])
-            depth_from_ca = mol2_depth.get(aid, 99)
-            sc_atoms_by_elem_depth.setdefault((elem, depth_from_ca), []).append(aid)
-
-        pdb_names_used: set[str] = set()
-        for (elem, depth), mol2_aids in sorted(sc_atoms_by_elem_depth.items()):
-            pdb_candidates = pdb_names_by_depth.get((elem, depth), [])
-            available = [n for n in pdb_candidates if n not in pdb_names_used]
-            for mol2_aid, pdb_name in zip(mol2_aids, available):
-                rename[mol2_aid] = (pdb_name, atoms[mol2_aid]["type"])
-                pdb_names_used.add(pdb_name)
-
-    n_atoms = len(core_ids)
-    core_bond_set = [(a1, a2, bt) for a1, a2, bt in bonds if a1 not in cap_atoms and a2 not in cap_atoms]
-    n_bonds = len(core_bond_set)
-    new_id: dict[int, int] = {old: i + 1 for i, old in enumerate(core_ids)}
-
-    lines = [
-        "@<TRIPOS>MOLECULE",
-        mol_name,
-        f"   {n_atoms}    {n_bonds}     1     0     0",
-        "SMALL",
-        "RESP Charge",
-        "",
-        "",
-        "@<TRIPOS>ATOM",
-    ]
-    for old_id in core_ids:
-        atom = atoms[old_id]
-        nid = new_id[old_id]
-        name, atype = rename.get(old_id, (atom["name"], atom["type"]))
-        lines.append(
-            f"      {nid} {name:<10s} {atom['x']} {atom['y']} {atom['z']} "
-            f"{atype:<8s} {atom['subst_id']}  {atom['subst_name']:<8s} {atom['charge']}"
-        )
-
-    lines.append("@<TRIPOS>BOND")
-    for bid, (a1, a2, bt) in enumerate(core_bond_set, start=1):
-        lines.append(f"     {bid}    {new_id[a1]}    {new_id[a2]} {bt}")
-
-    subst_lines = sections.get("SUBSTRUCTURE", [])
-    if subst_lines:
-        lines.append("@<TRIPOS>SUBSTRUCTURE")
-        lines.extend(subst_lines)
-
-    output_mol2.write_text("\n".join(lines) + "\n")
     return output_mol2
 
 
