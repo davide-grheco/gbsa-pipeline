@@ -172,34 +172,29 @@ def _strip_mol2_dipeptide_caps(
 
     cap_idx: set[int] = {a.idx for a in structure.atoms if a.residue.name.upper() in {"ACE", "NME"}}
 
-    adj_pmd: dict[int, list[pmd.Atom]] = {a.idx: [] for a in structure.atoms}
-    for bond in structure.bonds:
-        adj_pmd[bond.atom1.idx].append(bond.atom2)
-        adj_pmd[bond.atom2.idx].append(bond.atom1)
-
     backbone_n = None
     for atom in structure.atoms:
         if atom.idx in cap_idx or atom.type.lower() not in _GAFF_N_TYPES:
             continue
-        if any(nb.idx in cap_idx for nb in adj_pmd[atom.idx]):
+        if any(nb.idx in cap_idx for nb in atom.bond_partners):
             backbone_n = atom
             break
     if backbone_n is None:
         raise ValueError(f"Could not identify backbone N in {mol2_path}")
 
     backbone_ca = next(
-        (nb for nb in adj_pmd[backbone_n.idx] if nb.idx not in cap_idx and nb.type.lower() == "c3"),
+        (nb for nb in backbone_n.bond_partners if nb.idx not in cap_idx and nb.type.lower() == "c3"),
         None,
     )
     if backbone_ca is None:
         raise ValueError(f"Could not identify backbone CA in {mol2_path}")
 
     backbone_c = backbone_o = None
-    for nb in adj_pmd[backbone_ca.idx]:
+    for nb in backbone_ca.bond_partners:
         if nb is backbone_n or nb.idx in cap_idx:
             continue
         if nb.type.lower() in _GAFF_C_TYPES and nb.type.lower() != "c3":
-            o_nbs = [x for x in adj_pmd[nb.idx] if x.type.lower() == "o" and x is not backbone_ca]
+            o_nbs = [x for x in nb.bond_partners if x.type.lower() == "o" and x is not backbone_ca]
             if o_nbs:
                 backbone_c = nb
                 backbone_o = o_nbs[0]
@@ -208,17 +203,17 @@ def _strip_mol2_dipeptide_caps(
         raise ValueError(f"Could not identify backbone C/O in {mol2_path}")
 
     backbone_ha = next(
-        (nb for nb in adj_pmd[backbone_ca.idx] if nb.type.lower() == "h1" and nb.idx not in cap_idx),
+        (nb for nb in backbone_ca.bond_partners if nb.type.lower() == "h1" and nb.idx not in cap_idx),
         None,
     )
     backbone_h = next(
-        (nb for nb in adj_pmd[backbone_n.idx] if nb.type.lower() in {"hn", "h"} and nb.idx not in cap_idx),
+        (nb for nb in backbone_n.bond_partners if nb.type.lower() in {"hn", "h"} and nb.idx not in cap_idx),
         None,
     )
     backbone_cb = next(
         (
             nb
-            for nb in adj_pmd[backbone_ca.idx]
+            for nb in backbone_ca.bond_partners
             if nb is not backbone_n
             and nb is not backbone_c
             and nb.idx not in cap_idx
@@ -230,7 +225,7 @@ def _strip_mol2_dipeptide_caps(
     backbone_hb_atoms: list[pmd.Atom] = []
     if backbone_cb is not None:
         backbone_hb_atoms = [
-            nb for nb in adj_pmd[backbone_cb.idx] if nb.type.lower() in {"h1", "hc", "hx"} and nb.idx not in cap_idx
+            nb for nb in backbone_cb.bond_partners if nb.type.lower() in {"h1", "hc", "hx"} and nb.idx not in cap_idx
         ]
 
     backbone_n.name = "N"
