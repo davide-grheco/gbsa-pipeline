@@ -128,6 +128,16 @@ _NPT_STABILITY_PARAMS: dict[str, Any] = {
     "constraint_algorithm": "LINCS",
     "lincs_order": 4,
 }
+_BAROSTAT_FIELDS = ("pcoupl", "pcoupltype", "tau_p", "ref_p", "compressibility")
+
+
+def npt_barostat_overrides(md_params: GromacsParams) -> dict[str, Any]:
+    """Merge ''_NPT_STABILITY_PARAMS'' with the barosrtate settins from 'md_params'."""
+    return {
+        **_NPT_STABILITY_PARAMS,
+        **{field: getattr(md_params, field) for field in _BAROSTAT_FIELDS},
+    }
+
 
 _SOLVENT_RELAX_PARAMS: dict[str, Any] = {
     # sd integrator: damps velocity spikes in waters that were placed too
