@@ -11,6 +11,7 @@ from gbsa_pipeline.mdp import (
     GromacsCustom,
     GromacsParams,
     Integrator,
+    PCoupleType,
     run_gro_custom,
 )
 
@@ -64,6 +65,27 @@ def test_params_coerces_integral_float_to_int() -> None:
 def test_params_non_integral_float_errors() -> None:
     with pytest.raises(ValidationError):
         GromacsParams(nsteps=cast("Any", 5.5))
+
+
+def test_params_ref_p_accepts_tuple_4_semiisotropic() -> None:
+    """Check for ref_p/compresssibility for coupled barostates."""
+    params = GromacsParams(
+        pcoupltype=PCoupleType.SEMIISOTROPIC,
+        ref_p=(1.0, 1.0),
+        compressibility=(4.5e-05, 4.5e-05),
+    )
+    mdp_text = params.to_mdp()
+
+    assert "pcoupltype = semiisotropic" in mdp_text
+    assert "ref-p = 1.0 1.0" in mdp_text
+    assert "compressibility = 4.5e-05 4.5e-05" in mdp_text
+
+
+def test_params_ref_p_still_accepts_plain_float() -> None:
+    """The isotropic default (a single float) still renders as before."""
+    lines = GromacsParams().to_mdp_lines()
+
+    assert "ref-p = 1.0" in lines
 
 
 def test_gromacs_custom_initialises_defaults() -> None:

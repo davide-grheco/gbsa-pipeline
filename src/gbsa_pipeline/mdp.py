@@ -116,6 +116,8 @@ def format_gmx_value(value: Any) -> str:
         return str(value)
     if isinstance(value, str):
         return value.strip()
+    if isinstance(value, (list, tuple)):
+        return " ".join(format_gmx_value(v) for v in value)  # GROMACS expects multi-value keys for membrane proteins
     raise TypeError(f"Unsupported .mdp value type: {type(value).__name__}")
 
 
@@ -145,7 +147,11 @@ def set_mdp_key(lines: list[str], key: str, value: Any) -> list[str]:
             continue
         indent, _, eq_ws, comment = m.groups()
         suffix = f"  {comment}" if comment else ""
-        return [*lines[:i], f"{indent}{wanted}{eq_ws}{mdp_value}{suffix}", *lines[i + 1 :]]
+        return [
+            *lines[:i],
+            f"{indent}{wanted}{eq_ws}{mdp_value}{suffix}",
+            *lines[i + 1 :],
+        ]
 
     return [*lines, f"{wanted:<28} = {mdp_value}"]
 
@@ -255,8 +261,9 @@ class GromacsParams(BaseModel):
     pcoupl: Barostat = Barostat.NO
     pcoupltype: PCoupleType = PCoupleType.ISOTROPIC
     tau_p: float = 2.0
-    ref_p: float = 1.0
-    compressibility: float = 4.5e-5
+    # mulitiple float values allowed for anisotropic barostate coupling for membrane calculations.
+    ref_p: float | tuple[float, float] = 1.0
+    compressibility: float | tuple[float, float] = 4.5e-5
     refcoord_scaling: str = "No"
 
     # Thermostat
