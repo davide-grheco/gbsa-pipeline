@@ -1,13 +1,10 @@
 """Unit tests for mmbsa.MMPBSAConfig and rendering helpers."""
 
-from __future__ import annotations
+from pathlib import Path
 
-from typing import TYPE_CHECKING
+import pytest
 
-from gbsa_pipeline.mmbsa import GeneralParams, MMPBSAConfig
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from gbsa_pipeline.mmbsa import GBParams, GeneralParams, MMPBSAConfig, PBParams
 
 
 def test_config_renders_general_namelist() -> None:
@@ -128,3 +125,52 @@ def test_write_creates_file(tmp_path: Path) -> None:
     assert returned == out
     assert out.exists()
     assert out.stat().st_size > 0
+
+
+def test_gb_with_membrane_pb_raises() -> None:
+    """Requesting GB alongside an implicit-membrane PB config is rejected.
+
+    gmx_MMPBSA silently ignores ``memopt`` for ``&gb`` — the GB models have no
+    membrane term — so this combination would compute a GB energy that quietly
+    ignores the membrane instead of failing loudly. MMPBSAConfig should reject
+    it at construction time rather than let a misleading input file reach
+    gmx_MMPBSA.
+    """
+    with pytest.raises(ValueError, match="membrane"):
+        MMPBSAConfig(gb=GBParams(), pb=PBParams(memopt=1, eneopt=1))
+
+
+def test_pb_only_membrane_config_is_accepted() -> None:
+    """A membrane PB config with gb=None constructs and renders memopt.
+
+    This is the supported path for membrane-protein MM/PBSA runs: PB only,
+    with the implicit membrane enabled.
+    """
+    config = MMPBSAConfig(gb=None, pb=PBParams(memopt=1, eneopt=1))
+    text = config.to_text()
+
+    assert "&gb" not in text
+    assert "memopt" in text
+
+
+def test_membrane_with_default_eneopt_raises() -> None:
+    """PBParams(memopt=1) with the default eneopt=2 is rejected.
+
+    eneopt=2 (charge-view energies, PBParams' default) is unsupported for
+    membrane systems per the gmx_MMPBSA docs; the membrane examples all set
+    eneopt=1. Since PBParams defaults to eneopt=2, simply turning on memopt
+    without also overriding eneopt is a likely mistake worth catching early.
+    """
+    with pytest.raises(ValueError, match="eneopt"):
+        PBParams(memopt=1)
+
+
+def test_membrane_emem_out_of_bounds_raises() -> None:
+    """PBParams(memopt=1) requires indi <= emem < exdi.
+
+    The membrane dielectric constant must sit between the solute and solvent
+    dielectrics or gmx_MMPBSA errors; this checks the boundary is enforced
+    before the input file is even written.
+    """
+    with pytest.raises(ValueError, match="emem"):
+        PBParams(memopt=1, eneopt=1, emem=100.0)
