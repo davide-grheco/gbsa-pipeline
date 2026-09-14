@@ -7,6 +7,10 @@ It does not handle output parsing, energy decomposition, or any post-processing
 of results — those concerns belong to the caller.
 See the gmx_MMPBSA documentation at https://valdes-tresanco-ms.github.io/gmx_MMPBSA/
 for the full list of supported namelist keywords and their meaning.
+
+Membrane proteins (implicit lipid bilayer) are supported through
+``&pb`` only — gmx_MMPBSA's GB models have no membrane term — by setting
+``PBParams(memopt=1, ...)`` and ``MMPBSAConfig(gb=None, pb=...)`
 """
 
 from __future__ import annotations
