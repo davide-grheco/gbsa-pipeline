@@ -12,6 +12,7 @@ from gbsa_pipeline.solvation_box import (
     SolvationParams,
     WaterModel,
     run_solvation,
+    solvate_membrane,
 )
 
 if TYPE_CHECKING:
@@ -156,3 +157,28 @@ def test_solvation_real_protein_without_neutralisation(tmp_path: Path) -> None:
     assert water_mols.nMolecules() > 0
 
     _ion_molecules(solvated)
+
+
+@pytest.mark.integration
+def test_solvate_membrane_preserves_lateral_box(tmp_path: Path) -> None:
+    """x,y, stay locked to the bilayer patch, opnly z grows."""
+    system = BSS.IO.readMolecules(
+        files=[
+            "tests/testdata/membrane/unsolvated/system.gro",
+            "tests/testdata/membrane/unsolvated/system.top",
+        ],
+        make_whole=True,
+    )
+    dims_before = [dimension.value() for dimension in system._sire_object.property("space").dimensions()]
+
+    params = SolvationParams(water_model=WaterModel.TIP3P, ion_concentration=0.15, neutralize=True)
+    solvated = solvate_membrane(system=system, params=params, z_padding=1.5, work_dir=tmp_path)
+
+    dims_after = [dimension.value() for dimension in solvated._sire_object.property("space").dimensions()]
+
+    assert dims_after[0] == pytest.approx(dims_before[0])
+    assert dims_after[1] == pytest.approx(dims_before[1])
+    assert dims_after[2] > dims_before[2]
+
+    water_mols = solvated.getWaterMolecules()
+    assert water_mols.nMolecules() > 0
