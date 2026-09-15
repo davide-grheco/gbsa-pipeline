@@ -219,7 +219,7 @@ def solvate_membrane(
 
     Unlike run_solvation (isotropic padding), this preserves x&y from the inputs system's own box extending only the z-vector.
     """
-    dimensions = system._sire_object.property("space").dimension()  # Å
+    dimensions = system._sire_object.property("space").dimensions()  # Å
     x, y, z = (dimension.value() / 10 for dimension in dimensions)  # nm
     new_box = [
         x * BSS.Units.Length.nanometer,
@@ -227,17 +227,11 @@ def solvate_membrane(
         (z + 2 * z_padding) * BSS.Units.Length.nanometer,
     ]
 
-    angles = [
-        90 * BSS.Units.Angle.degree,
-        90 * BSS.Units.Angle.degree,
-        90 * BSS.Units.Angle.degree,
-    ]
+    system.setBox(new_box, angles=[90 * BSS.Units.Angle.degree] * 3)
 
     solvent = _get_bss_solvent_function(BSS, params.water_model)
     kwargs: dict[str, Any] = {
         "molecule": system,
-        "box": new_box,
-        "angles": angles,
         "is_neutral": params.neutralize,
     }
 

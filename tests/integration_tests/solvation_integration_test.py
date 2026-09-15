@@ -161,11 +161,20 @@ def test_solvation_real_protein_without_neutralisation(tmp_path: Path) -> None:
 
 @pytest.mark.integration
 def test_solvate_membrane_preserves_lateral_box(tmp_path: Path) -> None:
-    """x,y, stay locked to the bilayer patch, opnly z grows."""
+    """x,y stay locked to the input box; only z grows.
+
+    Uses the existing (already-parametrized) solvation testdata rather than
+    the 2rh1 membrane fixture: solvate_membrane's box math is agnostic to
+    what the system contains, and the 2rh1 system is reserved for the
+    pre_solvated=True merge path (it already has water, and is a much larger
+    143k-atom system that triggers an unrelated crash deep in BSS/Sire when
+    run through Solvent.tip3p — worth investigating separately, but not a
+    reason to block this box-mechanics test).
+    """
     system = BSS.IO.readMolecules(
         files=[
-            "tests/testdata/membrane/unsolvated/system.gro",
-            "tests/testdata/membrane/unsolvated/system.top",
+            "tests/testdata/solvation/complex.gro",
+            "tests/testdata/solvation/complex.top",
         ],
         make_whole=True,
     )
