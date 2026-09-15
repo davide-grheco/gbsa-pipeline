@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import tomllib
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from gbsa_pipeline.mdp import GromacsParams
 from gbsa_pipeline.membrane import DEFAULT_LIPID_RESNAMES
@@ -113,13 +113,21 @@ class RunConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    system: SystemConfig
+    system: SystemConfig | None = None
+    membrane: MembraneSystemConfig | None = None
     forcefield: ParametrizationConfig = Field(default_factory=ParametrizationConfig)
     solvation: SolvationConfig = Field(default_factory=SolvationConfig)
     minimization: MinimizationConfig = Field(default_factory=MinimizationConfig)
     equilibration: EquilibrationConfig = Field(default_factory=EquilibrationConfig)
     npt_equilibration: NptConfig = Field(default_factory=NptConfig)
     md: GromacsParams = Field(default_factory=GromacsParams)
+
+    @model_validator(mode="after")
+    def _validate_system_or_membrane(self) -> Self:
+        """Exactly one of [system] or [membrane] must be set."""
+        if (self.system is None) == (self.membrane is None):
+            raise ValueError("Set exactly one of [system] or [membrane] to run the config.")
+        return self
 
     @classmethod
     def from_toml(cls, path: Path) -> RunConfig:
@@ -155,8 +163,13 @@ class RunConfig(BaseModel):
         Raises:
         ------
         ValueError
-            If ``system.ligand`` is ``None`` (ligand is required for parametrization).
+            If ``system`` is unset (membrane path) or ``system.ligand`` is ``None``.
         """
+        if self.system is None:
+            raise ValueError(
+                "to_parametrization_input() requires the [system] section. "
+                "This run config uses [membrane] instead, which skips parametrization."
+            )
         if self.system.ligand is None:
             raise ValueError(
                 "system.ligand must be set to run the parametrization stage. "

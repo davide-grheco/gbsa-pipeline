@@ -59,6 +59,7 @@ def test_from_toml_minimal(tmp_path: Path) -> None:
 
     cfg = RunConfig.from_toml(toml)
 
+    assert cfg.system is not None
     assert cfg.system.protein == protein
     assert cfg.system.ligand is None
     assert cfg.forcefield.protein_ff == ProteinFF.FF14SB
@@ -108,6 +109,7 @@ def test_from_toml_full(tmp_path: Path) -> None:
 
     cfg = RunConfig.from_toml(toml)
 
+    assert cfg.system is not None
     assert cfg.system.ligand == ligand
     assert cfg.system.net_charge == -1
     assert cfg.forcefield.protein_ff == ProteinFF.FF19SB
@@ -267,6 +269,56 @@ def test_to_parametrization_input_raises_when_no_ligand(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match=r"system\.ligand"):
         cfg.to_parametrization_input(tmp_path / "work")
+
+
+def test_to_parametrization_input_raises_when_membrane_path(tmp_path: Path) -> None:
+    gro = tmp_path / "system.gro"
+    top = tmp_path / "system.top"
+    gro.write_text("", encoding="utf-8")
+    top.write_text("", encoding="utf-8")
+
+    cfg = RunConfig(membrane=MembraneSystemConfig(gro_file=gro, top_file=top))
+
+    with pytest.raises(ValueError, match=r"\[system\]"):
+        cfg.to_parametrization_input(tmp_path / "work")
+
+
+# ---------------------------------------------------------------------------
+# RunConfig system/membrane branching
+# ---------------------------------------------------------------------------
+
+
+def test_run_config_rejects_both_system_and_membrane(tmp_path: Path) -> None:
+    protein = tmp_path / "protein.pdb"
+    protein.write_text("", encoding="utf-8")
+    gro = tmp_path / "system.gro"
+    top = tmp_path / "system.top"
+    gro.write_text("", encoding="utf-8")
+    top.write_text("", encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="exactly one"):
+        RunConfig(
+            system=SystemConfig(protein=protein),
+            membrane=MembraneSystemConfig(gro_file=gro, top_file=top),
+        )
+
+
+def test_run_config_rejects_neither_system_nor_membrane() -> None:
+    with pytest.raises(ValidationError, match="exactly one"):
+        RunConfig()
+
+
+def test_run_config_accepts_membrane_only(tmp_path: Path) -> None:
+    gro = tmp_path / "system.gro"
+    top = tmp_path / "system.top"
+    gro.write_text("", encoding="utf-8")
+    top.write_text("", encoding="utf-8")
+
+    cfg = RunConfig(membrane=MembraneSystemConfig(gro_file=gro, top_file=top))
+
+    assert cfg.membrane is not None
+    assert cfg.system is None
+    assert cfg.membrane.gro_file == gro
 
 
 # ---------------------------------------------------------------------------
