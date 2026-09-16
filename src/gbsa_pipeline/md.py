@@ -132,7 +132,7 @@ _BAROSTAT_FIELDS = ("pcoupl", "pcoupltype", "tau_p", "ref_p", "compressibility")
 
 
 def npt_barostat_overrides(md_params: GromacsParams) -> dict[str, Any]:
-    """Merge ''_NPT_STABILITY_PARAMS'' with the barosrtate settins from 'md_params'."""
+    """Merge ''_NPT_STABILITY_PARAMS'' with the barostate settings from 'md_params'."""
     return {
         **_NPT_STABILITY_PARAMS,
         **{field: getattr(md_params, field) for field in _BAROSTAT_FIELDS},
