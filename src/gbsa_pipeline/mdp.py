@@ -28,7 +28,7 @@ import re
 from collections.abc import Mapping
 from enum import Enum
 from tempfile import NamedTemporaryFile
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -159,6 +159,15 @@ def set_mdp_key(lines: list[str], key: str, value: Any) -> list[str]:
 # ---------------------------------------------------------------------------
 # GromacsParams
 # ---------------------------------------------------------------------------
+class SemiisotropicValue(NamedTuple):
+    """Lateral (xy) and normal (z) values for semiisotropic barostat coupling."""
+
+    lateral: float
+    normal: float
+
+
+ref_p: float | SemiisotropicValue = 1.0
+compressibility: float | SemiisotropicValue = 4.5e-5
 
 
 class GromacsParams(BaseModel):
