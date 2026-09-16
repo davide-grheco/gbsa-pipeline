@@ -8,8 +8,8 @@ from typing import Any, Self
 import tomllib
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from gbsa_pipeline._constants import DEFAULT_LIPID_RESNAMES
 from gbsa_pipeline.mdp import GromacsParams
-from gbsa_pipeline.membrane import DEFAULT_LIPID_RESNAMES
 from gbsa_pipeline.parametrization import ParametrizationConfig, ParametrizationInput
 from gbsa_pipeline.solvation_box import BoxShape, SolvationParams
 

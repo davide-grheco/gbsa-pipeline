@@ -15,36 +15,22 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
     from typing import Any
-
-    from patlib import Path
 
 import gemmi
 
+from gbsa_pipeline._constants import DEFAULT_LIPID_RESNAMES
 from gbsa_pipeline.mmbsa import PBParams
+from gbsa_pipeline.parametrization_enum import LigandFF
 
 logger = logging.getLogger(__name__)
 
+_LIGAND_FF_LEAPRC: dict[LigandFF, str] = {
+    LigandFF.GAFF: "leaprc.gaff",
+    LigandFF.GAFF2: "leaprc.gaff2",
+}
 
-# Common phospholipid residue names used in PDB files.
-DEFAULT_LIPID_RESNAMES: frozenset[str] = frozenset(
-    {
-        "DPP",
-        "DPPC",
-        "POP",
-        "POPC",
-        "POPE",
-        "POPG",
-        "POPS",
-        "POPI",
-        "DOP",
-        "DOPC",
-        "DOPE",
-        "DMP",
-        "DMPC",
-        "DLPC",
-    }
-)
 
 # Minimum meaningful number of lipids per leaflet.
 _MIN_PHOSPHATES_PER_LEAFLET = 5
