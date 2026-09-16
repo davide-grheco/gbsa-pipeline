@@ -44,7 +44,7 @@ class MembraneSystemConfig(BaseModel):
 
     gro_file: Path
     top_file: Path
-    pre_solvated: bool = False
+    solvate: bool = True  # run membrane aware solvation
     lipid_resnames: frozenset[str] = frozenset(DEFAULT_LIPID_RESNAMES)  # import from membrane.py
     z_padding: float = Field(default=1.5, ge=0.0)  # nm, only used when not pre_solvated
 
