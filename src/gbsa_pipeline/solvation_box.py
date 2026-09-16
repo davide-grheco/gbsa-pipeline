@@ -203,12 +203,6 @@ def _make_bss_box(bss: Any, shape: BoxShape, size_nm: float) -> tuple[Any, Any]:
     raise ValueError(f"Unsupported solvation box shape: {shape!s}")
 
 
-def _extend_box_z(box: Any, z_padding: float) -> Any:
-    """Return the box vectors with only the z edge extended by 2*z_padding."""
-    x, y, z = box
-    return [x, y, z + 2 * z_padding * BSS.Units.Length.nanometer]
-
-
 def solvate_membrane(
     system: Any,
     params: SolvationParams,
