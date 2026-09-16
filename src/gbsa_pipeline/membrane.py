@@ -10,15 +10,15 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import gemmi
 import MDAnalysis as mda  # noqa: N813 -- `mda` is the standard alias used throughout MDAnalysis's own docs
 import numpy as np
 from MDAnalysis.analysis.leaflet import LeafletFinder
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from pathlib import Path
     from typing import Any
+
+    import gemmi
 
 
 from gbsa_pipeline.mmbsa import PBParams
@@ -84,22 +84,25 @@ class MembraneGeometry:
 
 
 def estimate_membrane_geometry(
-    structure: Path,
+    structure: gemmi.Structure,
     lipid_resnames: Sequence[str] = tuple(DEFAULT_LIPID_RESNAMES),
     cutoff: float = 15.0,
 ) -> MembraneGeometry:
     """Measure bilayer parameters from lipid phosphate atoms.
+
+    ``structure`` must already be parsed (e.g. via ``gemmi.read_structure``)
+    so that file-parsing errors are handled by the caller, separately from
+    the geometry-computation errors raised here.
 
     Phosphate atoms are found by gemmi (robust against e.g. Pt/P confusion)
     and grouped into two leaflets using MDAnalysis's LeafletFinder, a
     distance-based graph clustering.
     """
     resnames = frozenset(lipid_resnames)
-    struct = gemmi.read_structure(str(structure))
 
     coords = [
         [atom.pos.x, atom.pos.y, atom.pos.z]
-        for model in struct
+        for model in structure
         for chain in model
         for residue in chain
         if residue.name.strip() in resnames
@@ -110,8 +113,8 @@ def estimate_membrane_geometry(
     if not coords:
         raise ValueError(
             f"No phosphate atoms belonging to {sorted(resnames)} were found "
-            f"in {structure}. Check the lipid residue names and pass "
-            "lipid_resnames explicitly."
+            f"in structure '{structure.name}'. Check the lipid residue names "
+            "and pass lipid_resnames explicitly."
         )
 
     positions = np.array(coords, dtype=np.float32)

@@ -10,7 +10,11 @@ from pathlib import Path
 import gemmi
 import pytest
 
-from gbsa_pipeline.membrane import _is_phosphate_atom, estimate_membrane_geometry
+from gbsa_pipeline.membrane import (
+    MembraneGeometry,
+    _is_phosphate_atom,
+    estimate_membrane_geometry,
+)
 
 TESTDATA = Path(__file__).resolve().parents[1] / "testdata" / "membrane" / "1py6"
 
@@ -19,8 +23,9 @@ STRUCTURE = TESTDATA / "atomistic-system.pdb"
 
 def test_estimate_membrane_geometry_matches_testdata() -> None:
     """Check the 209/DPPC bilayer matches hand-checked values."""
+    struct = gemmi.read_structure(str(STRUCTURE))
     geometry = estimate_membrane_geometry(
-        STRUCTURE,
+        struct,
         lipid_resnames=["DPP"],
     )
 
@@ -41,7 +46,7 @@ def test_is_phosphate_atom_excludes_other_p_elements(symbol: str, expected: bool
     assert _is_phosphate_atom(atom) is expected
 
 
-def test_estimate_membrane_geometry_ignores_contaminant_p_residue(tmp_path: Path) -> None:
+def test_estimate_membrane_geometry_ignores_contaminant_p_residue() -> None:
     """Contaminant lipid-like residues must not leak into the phosphate count.
 
     A residue starting with 'P' and containing a real phosphorus atom (e.g. PLM,
@@ -61,14 +66,28 @@ def test_estimate_membrane_geometry_ignores_contaminant_p_residue(tmp_path: Path
     contaminant.add_atom(atom)
     chain.add_residue(contaminant)
 
-    contaminated = tmp_path / "contaminated.pdb"
-    struct.write_pdb(str(contaminated))
-
-    geometry = estimate_membrane_geometry(contaminated, lipid_resnames=["DPP"])
+    geometry = estimate_membrane_geometry(struct, lipid_resnames=["DPP"])
 
     assert geometry.n_phosphates == 209
 
 
 def test_estimate_membrane_geometry_raises_when_no_phosphates_found() -> None:
+    struct = gemmi.read_structure(str(STRUCTURE))
     with pytest.raises(ValueError, match="No phosphate atoms"):
-        estimate_membrane_geometry(STRUCTURE, lipid_resnames=["NOTALIPID"])
+        estimate_membrane_geometry(struct, lipid_resnames=["NOTALIPID"])
+
+
+def test_membrane_geometry_pb_params() -> None:
+    """pb_params() bridges a measured geometry into gmx_MMPBSA's membrane PBParams.
+
+    Not wired into the MMPBSA stage yet (planned for a follow-up PR once that
+    stage gains membrane support) -- this proves it's correct in the meantime.
+    """
+    geometry = MembraneGeometry(mctrdz=50.0, mthick=39.4, n_phosphates=209)
+
+    params = geometry.pb_params()
+
+    assert params.memopt == 1
+    assert params.mctrdz == 50.0
+    assert params.mthick == 39.4
+    assert params.eneopt == 1

@@ -476,16 +476,16 @@ def test_npt_barostat_overrides_forwards_membrane_pcoupling() -> None:
 
     overrides = md.npt_barostat_overrides(md_params)
 
-    assert overrides["pcoupl"] == Barostat.CRESCALE
-    assert overrides["pcoupltype"] == PCoupleType.SEMIISOTROPIC
-    assert overrides["ref_p"] == (1.0, 1.0)
-    assert overrides["compressibility"] == (4.5e-5, 4.5e-5)
-    assert "nsteps" not in overrides
+    assert overrides.pcoupl == Barostat.CRESCALE
+    assert overrides.pcoupltype == PCoupleType.SEMIISOTROPIC
+    assert overrides.ref_p == (1.0, 1.0)
+    assert overrides.compressibility == (4.5e-5, 4.5e-5)
+    assert overrides.nsteps != 250_000  # production-only value must not leak in
 
 
 def test_npt_barostat_overrides_keeps_npt_stability_defaults() -> None:
     """Non-barostat NPT stability overrides (dt, LINCS, constraints) are preserved."""
     overrides = md.npt_barostat_overrides(GromacsParams())
 
-    assert overrides["dt"] == 0.002
-    assert overrides["constraints"] == "h-bonds"
+    assert overrides.dt == 0.002
+    assert overrides.constraints == "h-bonds"
