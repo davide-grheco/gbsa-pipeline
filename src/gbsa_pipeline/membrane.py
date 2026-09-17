@@ -14,7 +14,7 @@ import MDAnalysis as mda
 import numpy as np
 from MDAnalysis.analysis.leaflet import LeafletFinder
 
-from gbsa_pipeline._gemmi_utils import _iter_residues
+from gbsa_pipeline._gemmi_utils import iter_residues
 from gbsa_pipeline.mmbsa import PBParams
 
 if TYPE_CHECKING:
@@ -102,7 +102,7 @@ def estimate_membrane_geometry(
     coords = [
         [atom.pos.x, atom.pos.y, atom.pos.z]
         for model in structure
-        for residue in _iter_residues(model)
+        for residue in iter_residues(model)
         if residue.name.strip() in resnames
         for atom in residue
         if _is_phosphate_atom(atom)

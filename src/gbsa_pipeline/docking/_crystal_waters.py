@@ -11,7 +11,7 @@ import numpy as np
 from rdkit import Chem
 
 from gbsa_pipeline._constants import WATER_RESIDUE_NAMES
-from gbsa_pipeline._gemmi_utils import _iter_residues
+from gbsa_pipeline._gemmi_utils import iter_residues
 from gbsa_pipeline._spatial import contact_pairs
 from gbsa_pipeline.docking._models import DockingManifest, DockingValidation
 from gbsa_pipeline.docking._receptor_prep import merge_pdb_structures
@@ -63,7 +63,7 @@ def _pdb_heavy_atom_coords(
         return np.empty((0, 3))
     coords = [
         _atom_pos(atom)
-        for residue in _iter_residues(structure[0])
+        for residue in iter_residues(structure[0])
         if residue.name.strip().upper() not in exclude_residues
         for atom in residue
         if not atom.is_hydrogen()
@@ -119,7 +119,7 @@ def _iter_residue_coords(pdb_path: Path) -> Iterator[tuple[str, np.ndarray]]:
     structure = _read_pdb_like(pdb_path)
     if not structure:
         return
-    for residue in _iter_residues(structure[0]):
+    for residue in iter_residues(structure[0]):
         atom = _first_heavy_atom(residue)
         if atom is not None:
             yield str(residue.seqid.num), _atom_pos(atom)
@@ -178,7 +178,7 @@ def select_docking_crystal_waters(
     out_chain = gemmi.Chain("W")
     retained_ids: list[str] = []
 
-    for residue in _iter_residues(structure[0]):
+    for residue in iter_residues(structure[0]):
         if (_ha := _first_heavy_atom(residue)) is None:
             continue
         ow = _atom_pos(_ha)
@@ -253,7 +253,13 @@ def _find_water_bridges(
         for i in lig_near:
             for j in rec_near:
                 bridges.append(
-                    (f"HOH{res_id}", f"lig_atom{i}", f"rec_atom{j}", float(lig_dists[i]), float(rec_dists[j]))
+                    (
+                        f"HOH{res_id}",
+                        f"lig_atom{i}",
+                        f"rec_atom{j}",
+                        float(lig_dists[i]),
+                        float(rec_dists[j]),
+                    )
                 )
     return bridges
 

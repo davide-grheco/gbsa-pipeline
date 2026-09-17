@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     import gemmi
 
 
-def _iter_residues(model: gemmi.Model) -> Iterator[gemmi.Residue]:
+def iter_residues(model: gemmi.Model) -> Iterator[gemmi.Residue]:
     """Yield every residue in a model, across all its chains."""
     for chain in model:
         yield from chain
