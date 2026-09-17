@@ -20,6 +20,8 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import pydantic
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -172,7 +174,7 @@ class GBParams:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
+@pydantic.dataclasses.dataclass(frozen=True)
 class PBParams:
     """Parameters for the ``&pb`` (Poisson-Boltzmann) namelist section.
 
