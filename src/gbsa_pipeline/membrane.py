@@ -52,6 +52,9 @@ _MIN_PHOSPHATES_PER_LEAFLET = 5
 # A bilayer has exactly two leaflets.
 _N_LEAFLETS = 2
 
+# index opf the Z coordinate in a [x,y,z] position arraz
+_Z_AXIS = 2
+
 
 def _is_phosphate_atom(atom: gemmi.Atom) -> bool:
     """Whether an atom is a phosphorus atom."""
@@ -131,10 +134,10 @@ def estimate_membrane_geometry(
         )
 
     upper, lower = groups
-    mthick = abs(float(upper.positions[:, 2].mean()) - float(lower.positions[:, 2].mean()))
+    mthick = abs(float(upper.positions[:, _Z_AXIS].mean()) - float(lower.positions[:, _Z_AXIS].mean()))
 
     return MembraneGeometry(
-        mctrdz=float(positions[:, 2].mean()),
+        mctrdz=float(positions[:, _Z_AXIS].mean()),
         mthick=mthick,
         n_phosphates=len(positions),
     )
