@@ -21,6 +21,10 @@ TESTDATA = Path(__file__).resolve().parents[1] / "testdata" / "membrane" / "1py6
 
 STRUCTURE = TESTDATA / "atomistic-system.pdb"
 
+TESTDATA_2RH1 = Path(__file__).resolve().parents[1] / "testdata" / "membrane" / "2rh1"
+
+SYSTEM_2RH1 = TESTDATA_2RH1 / "system_unsolvated.gro"
+
 
 def test_estimate_membrane_geometry_matches_testdata() -> None:
     """Check the 209/DPPC bilayer matches hand-checked values."""
@@ -57,6 +61,24 @@ def test_estimate_membrane_geometry_ignores_contaminant_p_residue() -> None:
     geometry = estimate_membrane_geometry(merged, lipid_resnames=["DPP"])
 
     assert geometry.n_phosphates == 209
+
+
+def test_estimate_membrane_geometry_raises_when_not_z_aligned() -> None:
+    """A membrane whose leaflets are separated laterally, not along z, is rejected.
+
+    Counter-example to the real, correctly z-aligned 2rh1 membrane-protein
+    system: rotate it 90 degrees (swap the y/z axes) so the bilayer normal
+    now points along y, and check that this is caught instead of silently
+    producing a wrong mthick/mctrdz.
+    """
+    universe = mda.Universe(str(SYSTEM_2RH1))
+
+    positions = universe.atoms.positions.copy()
+    positions[:, [1, 2]] = positions[:, [2, 1]]
+    universe.atoms.positions = positions
+
+    with pytest.raises(ValueError, match="Rotate model"):
+        estimate_membrane_geometry(universe, lipid_resnames=["POP"])
 
 
 def test_estimate_membrane_geometry_raises_when_no_phosphates_found() -> None:

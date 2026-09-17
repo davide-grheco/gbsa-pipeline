@@ -10,6 +10,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import numpy as np
 from MDAnalysis.analysis.leaflet import LeafletFinder
 
 from gbsa_pipeline.mmbsa import PBParams
@@ -90,6 +91,12 @@ def estimate_membrane_geometry(
     (real force-field topologies number phosphate atoms, e.g. "P8", "P31"),
     then grouped into two leaflets using LeafletFinder, a distance-based
     graph clustering.
+
+    Assumes the bilayer normal is (approximately) the z-axis of ``universe``'s
+    coordinate frame -- the convention used by essentially all membrane
+    simulation builders, and required by gmx_MMPBSA's own implicit-membrane
+    PB solver. A ValueError is raised if the two leaflets aren't primarily
+    separated along z.
     """
     resnames = " ".join(sorted(set(lipid_resnames)))
     phosphates = universe.select_atoms(f"resname {resnames} and name P*")
@@ -111,7 +118,14 @@ def estimate_membrane_geometry(
         )
 
     upper, lower = groups
-    mthick = abs(float(upper.positions[:, _Z_AXIS].mean()) - float(lower.positions[:, _Z_AXIS].mean()))
+    separation = upper.centroid() - lower.centroid()
+    lateral = float(np.linalg.norm(separation[:_Z_AXIS]))
+    normal_component = abs(float(separation[_Z_AXIS]))
+
+    if lateral > normal_component:
+        raise ValueError("Rotate model so lipid layer along z axis")
+
+    mthick = normal_component
 
     return MembraneGeometry(
         mctrdz=float(phosphates.positions[:, _Z_AXIS].mean()),
