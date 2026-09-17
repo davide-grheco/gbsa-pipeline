@@ -12,6 +12,7 @@ from gbsa_pipeline.mdp import (
     GromacsParams,
     Integrator,
     PCoupleType,
+    SemiisotropicValue,
     run_gro_custom,
 )
 
@@ -71,8 +72,8 @@ def test_params_ref_p_accepts_tuple_4_semiisotropic() -> None:
     """Check for ref_p/compresssibility for coupled barostates."""
     params = GromacsParams(
         pcoupltype=PCoupleType.SEMIISOTROPIC,
-        ref_p=(1.0, 1.0),
-        compressibility=(4.5e-05, 4.5e-05),
+        ref_p=SemiisotropicValue(1.0, 1.0),
+        compressibility=SemiisotropicValue(4.5e-05, 4.5e-05),
     )
     mdp_text = params.to_mdp()
 

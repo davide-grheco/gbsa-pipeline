@@ -28,7 +28,7 @@ import re
 from collections.abc import Mapping
 from enum import Enum
 from tempfile import NamedTemporaryFile
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -69,6 +69,7 @@ __all__ = [
     "LJPMECombination",
     "NghCutoffScheme",
     "PCoupleType",
+    "SemiisotropicValue",
     "Thermostat",
     "VDWModifier",
     "VDWType",
@@ -159,6 +160,20 @@ def set_mdp_key(lines: list[str], key: str, value: Any) -> list[str]:
 # ---------------------------------------------------------------------------
 # GromacsParams
 # ---------------------------------------------------------------------------
+
+
+class SemiisotropicValue(NamedTuple):
+    """Two-component GROMACS coupling value for semiisotropic pressure coupling.
+
+    GROMACS expects two space-separated numbers for ``ref_p``/``compressibility``
+    when ``pcoupltype = semiisotropic``: one for the membrane plane (``lateral``,
+    i.e. x=y) and one for the membrane normal (``normal``, i.e. z). A bare
+    ``tuple[float, float]`` doesn't say which number means which — GROMACS
+    silently applies the wrong pressure axis if lateral/normal get swapped.
+    """
+
+    lateral: float
+    normal: float
 
 
 class GromacsParams(BaseModel):
@@ -261,9 +276,9 @@ class GromacsParams(BaseModel):
     pcoupl: Barostat = Barostat.NO
     pcoupltype: PCoupleType = PCoupleType.ISOTROPIC
     tau_p: float = 2.0
-    # mulitiple float values allowed for anisotropic barostate coupling for membrane calculations.
-    ref_p: float | tuple[float, float] = 1.0
-    compressibility: float | tuple[float, float] = 4.5e-5
+    # SemiisotropicValue allowed for anisotropic barostat coupling for membrane calculations.
+    ref_p: float | SemiisotropicValue = 1.0
+    compressibility: float | SemiisotropicValue = 4.5e-5
     refcoord_scaling: str = "No"
 
     # Thermostat

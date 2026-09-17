@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 from gbsa_pipeline import md
-from gbsa_pipeline.mdp import Barostat, GromacsParams, PCoupleType
+from gbsa_pipeline.mdp import Barostat, GromacsParams, PCoupleType, SemiisotropicValue
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -469,8 +469,8 @@ def test_npt_barostat_overrides_forwards_membrane_pcoupling() -> None:
     md_params = GromacsParams(
         pcoupl=Barostat.CRESCALE,
         pcoupltype=PCoupleType.SEMIISOTROPIC,
-        ref_p=(1.0, 1.0),
-        compressibility=(4.5e-5, 4.5e-5),
+        ref_p=SemiisotropicValue(1.0, 1.0),
+        compressibility=SemiisotropicValue(4.5e-5, 4.5e-5),
         nsteps=250_000,  # production-only; must not leak into NPT overrides
     )
 
@@ -478,8 +478,8 @@ def test_npt_barostat_overrides_forwards_membrane_pcoupling() -> None:
 
     assert overrides.pcoupl == Barostat.CRESCALE
     assert overrides.pcoupltype == PCoupleType.SEMIISOTROPIC
-    assert overrides.ref_p == (1.0, 1.0)
-    assert overrides.compressibility == (4.5e-5, 4.5e-5)
+    assert overrides.ref_p == SemiisotropicValue(1.0, 1.0)
+    assert overrides.compressibility == SemiisotropicValue(4.5e-5, 4.5e-5)
     assert overrides.nsteps != 250_000  # production-only value must not leak in
 
 
