@@ -36,17 +36,17 @@ class MembraneSystemConfig(BaseModel):
     """[membrane system]- start already from pre-built protein in bilayer system.
 
     Structure/topology are alredy a complete pre-equilibrated lipid bilayer system.
-    'pre-solvated=False' (the common backmapping case)
-    'pre-solvated=True' the pipeline skips solvation step.
+    'solvate=True' (the common backmapping case) runs the solvation stage.
+    'solvate=False' the pipeline skips solvation step (structure is already solvated).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     gro_file: Path
     top_file: Path
-    pre_solvated: bool = False
+    solvate: bool = True
     lipid_resnames: frozenset[str] = frozenset(DEFAULT_LIPID_RESNAMES)
-    z_padding: float = Field(default=1.5, ge=0.0)  # nm, only used when not pre_solvated
+    z_padding: float = Field(default=1.5, ge=0.0)  # nm, only used when solvate is True
 
 
 class MinimizationConfig(BaseModel):

@@ -311,7 +311,7 @@ def test_membrane_system_config_defaults(tmp_path: Path) -> None:
 
     cfg = MembraneSystemConfig(gro_file=gro, top_file=top)
 
-    assert cfg.pre_solvated is False
+    assert cfg.solvate is True
     assert cfg.z_padding == 1.5
     assert "POPC" in cfg.lipid_resnames
 
