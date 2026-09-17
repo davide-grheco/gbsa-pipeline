@@ -11,6 +11,7 @@ import numpy as np
 from rdkit import Chem
 
 from gbsa_pipeline._constants import WATER_RESIDUE_NAMES
+from gbsa_pipeline._gemmi_utils import _iter_residues
 from gbsa_pipeline._spatial import contact_pairs
 from gbsa_pipeline.docking._models import DockingManifest, DockingValidation
 from gbsa_pipeline.docking._receptor_prep import merge_pdb_structures
@@ -62,8 +63,7 @@ def _pdb_heavy_atom_coords(
         return np.empty((0, 3))
     coords = [
         _atom_pos(atom)
-        for chain in structure[0]
-        for residue in chain
+        for residue in _iter_residues(structure[0])
         if residue.name.strip().upper() not in exclude_residues
         for atom in residue
         if not atom.is_hydrogen()
@@ -119,11 +119,10 @@ def _iter_residue_coords(pdb_path: Path) -> Iterator[tuple[str, np.ndarray]]:
     structure = _read_pdb_like(pdb_path)
     if not structure:
         return
-    for chain in structure[0]:
-        for residue in chain:
-            atom = _first_heavy_atom(residue)
-            if atom is not None:
-                yield str(residue.seqid.num), _atom_pos(atom)
+    for residue in _iter_residues(structure[0]):
+        atom = _first_heavy_atom(residue)
+        if atom is not None:
+            yield str(residue.seqid.num), _atom_pos(atom)
 
 
 # ---------------------------------------------------------------------------
@@ -179,22 +178,19 @@ def select_docking_crystal_waters(
     out_chain = gemmi.Chain("W")
     retained_ids: list[str] = []
 
-    for chain in structure[0]:
-        for residue in chain:
-            if (_ha := _first_heavy_atom(residue)) is None:
-                continue
-            ow = _atom_pos(_ha)
-            if not _in_docking_box(ow, box):
-                continue
-            if lig_coords.size > 0 and not np.any(np.linalg.norm(lig_coords - ow, axis=1) <= ligand_cutoff_angstrom):
-                continue
-            if rec_coords.size > 0 and np.any(
-                np.linalg.norm(rec_coords - ow, axis=1) <= receptor_clash_cutoff_angstrom
-            ):
-                LOGGER.debug("Crystal water %s discarded (receptor clash).", residue.seqid.num)
-                continue
-            out_chain.add_residue(residue.clone())
-            retained_ids.append(str(residue.seqid.num))
+    for residue in _iter_residues(structure[0]):
+        if (_ha := _first_heavy_atom(residue)) is None:
+            continue
+        ow = _atom_pos(_ha)
+        if not _in_docking_box(ow, box):
+            continue
+        if lig_coords.size > 0 and not np.any(np.linalg.norm(lig_coords - ow, axis=1) <= ligand_cutoff_angstrom):
+            continue
+        if rec_coords.size > 0 and np.any(np.linalg.norm(rec_coords - ow, axis=1) <= receptor_clash_cutoff_angstrom):
+            LOGGER.debug("Crystal water %s discarded (receptor clash).", residue.seqid.num)
+            continue
+        out_chain.add_residue(residue.clone())
+        retained_ids.append(str(residue.seqid.num))
 
     if not retained_ids:
         LOGGER.debug("No crystal waters survived selection.")

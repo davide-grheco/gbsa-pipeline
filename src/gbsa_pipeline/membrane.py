@@ -14,14 +14,14 @@ import MDAnalysis as mda  # noqa: N813 -- `mda` is the standard alias used throu
 import numpy as np
 from MDAnalysis.analysis.leaflet import LeafletFinder
 
+from gbsa_pipeline._gemmi_utils import _iter_residues
+from gbsa_pipeline.mmbsa import PBParams
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import Any
 
     import gemmi
-
-
-from gbsa_pipeline.mmbsa import PBParams
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +103,7 @@ def estimate_membrane_geometry(
     coords = [
         [atom.pos.x, atom.pos.y, atom.pos.z]
         for model in structure
-        for chain in model
-        for residue in chain
+        for residue in _iter_residues(model)
         if residue.name.strip() in resnames
         for atom in residue
         if _is_phosphate_atom(atom)
