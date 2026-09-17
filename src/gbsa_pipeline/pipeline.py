@@ -155,16 +155,12 @@ def _stage_nvt_restrained(config: RunConfig, system: Any, stage_dir: Path) -> An
 
 
 def _stage_npt(config: RunConfig, system: Any, stage_dir: Path, *, restraint: str | None = None) -> Any:
-    """NPT equilibration, optionally with backbone restraints."""
-    logger.info(
-        "  %.1f ps  restraint=%s",
-        config.npt_equilibration.simulation_time_ps,
-        restraint or "none",
-    )
     """NPT equilibration, optionally with backbone restraints.
 
-    Uses the same barostat as the [md] section so a memprot configured with pcouple = semiisotropic gets consistent not isotropic values during equilibration."""
-
+    Uses the same barostat as the [md] section so a memprot configured with
+    pcouple = semiisotropic gets consistent, not isotropic, values during
+    equilibration.
+    """
     logger.info(
         "  %.1f ps  restraint=%s  pcoupltype=%s",
         config.npt_equilibration.simulation_time_ps,
