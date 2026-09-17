@@ -10,18 +10,15 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import MDAnalysis as mda
-import numpy as np
 from MDAnalysis.analysis.leaflet import LeafletFinder
 
-from gbsa_pipeline._gemmi_utils import iter_residues
 from gbsa_pipeline.mmbsa import PBParams
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import Any
 
-    import gemmi
+    import MDAnalysis as mda
 
 logger = logging.getLogger(__name__)
 
@@ -52,13 +49,8 @@ _MIN_PHOSPHATES_PER_LEAFLET = 5
 # A bilayer has exactly two leaflets.
 _N_LEAFLETS = 2
 
-# index opf the Z coordinate in a [x,y,z] position arraz
+# Index of the z-coordinate in a [x, y, z] positions array.
 _Z_AXIS = 2
-
-
-def _is_phosphate_atom(atom: gemmi.Atom) -> bool:
-    """Whether an atom is a phosphorus atom."""
-    return atom.element.name == "P"
 
 
 @dataclass(frozen=True)
@@ -87,39 +79,31 @@ class MembraneGeometry:
 
 
 def estimate_membrane_geometry(
-    structure: gemmi.Structure,
+    universe: mda.Universe,
     lipid_resnames: Sequence[str] = tuple(DEFAULT_LIPID_RESNAMES),
     cutoff: float = 15.0,
 ) -> MembraneGeometry:
     """Measure bilayer parameters from lipid phosphate atoms.
 
-    Phosphorus atoms are identified by comparing each atom's element symbol
-    to "P" and grouped into two leaflets using MDAnalysis's LeafletFinder, a
-    distance-based graph clustering.
+    ``universe`` must already be parsed (e.g. via ``MDAnalysis.Universe(path)``)
+    so that file-parsing errors are handled by the caller.
+
+    Phosphate atoms are selected directly through MDAnalysis's own selection
+    language, combining lipid residue names with a "P*" atom-name wildcard
+    (real force-field topologies number phosphate atoms, e.g. "P8", "P31"),
+    then grouped into two leaflets using LeafletFinder, a distance-based
+    graph clustering.
     """
-    resnames = frozenset(lipid_resnames)
+    resnames = " ".join(sorted(set(lipid_resnames)))
+    phosphates = universe.select_atoms(f"resname {resnames} and name P*")
 
-    coords = [
-        [atom.pos.x, atom.pos.y, atom.pos.z]
-        for model in structure
-        for residue in iter_residues(model)
-        if residue.name.strip() in resnames
-        for atom in residue
-        if _is_phosphate_atom(atom)
-    ]
-
-    if not coords:
+    if len(phosphates) == 0:
         raise ValueError(
-            f"No phosphate atoms belonging to {sorted(resnames)} were found "
-            f"in structure '{structure.name}'. Check the lipid residue names "
-            "and pass lipid_resnames explicitly."
+            f"No phosphate atoms belonging to {sorted(set(lipid_resnames))} were found. "
+            "Check the lipid residue names and pass lipid_resnames explicitly."
         )
 
-    positions = np.array(coords, dtype=np.float32)
-    universe = mda.Universe.empty(len(positions), trajectory=True)
-    universe.atoms.positions = positions
-
-    finder = LeafletFinder(universe, universe.atoms, cutoff=cutoff)
+    finder = LeafletFinder(universe, phosphates, cutoff=cutoff)
     groups = finder.groups()
 
     if len(groups) != _N_LEAFLETS or min(len(group) for group in groups) < _MIN_PHOSPHATES_PER_LEAFLET:
@@ -133,7 +117,7 @@ def estimate_membrane_geometry(
     mthick = abs(float(upper.positions[:, _Z_AXIS].mean()) - float(lower.positions[:, _Z_AXIS].mean()))
 
     return MembraneGeometry(
-        mctrdz=float(positions[:, _Z_AXIS].mean()),
+        mctrdz=float(phosphates.positions[:, _Z_AXIS].mean()),
         mthick=mthick,
-        n_phosphates=len(positions),
+        n_phosphates=len(phosphates),
     )
