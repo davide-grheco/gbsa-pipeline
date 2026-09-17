@@ -54,7 +54,7 @@ _N_LEAFLETS = 2
 
 
 def _is_phosphate_atom(atom: gemmi.Atom) -> bool:
-    """Whether an atom is a phosphate atom."""
+    """Whether an atom is a phosphorus atom."""
     return atom.element.name == "P"
 
 
@@ -94,8 +94,8 @@ def estimate_membrane_geometry(
     so that file-parsing errors are handled by the caller, separately from
     the geometry-computation errors raised here.
 
-    Phosphate atoms are found by gemmi (robust against e.g. Pt/P confusion)
-    and grouped into two leaflets using MDAnalysis's LeafletFinder, a
+    Phosphorus atoms are identified by comparing each atom's element symbol
+    to "P" and grouped into two leaflets using MDAnalysis's LeafletFinder, a
     distance-based graph clustering.
     """
     resnames = frozenset(lipid_resnames)
