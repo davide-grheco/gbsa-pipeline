@@ -46,6 +46,19 @@ def test_is_phosphate_atom_excludes_other_p_elements(symbol: str, expected: bool
     assert _is_phosphate_atom(atom) is expected
 
 
+def test_is_phosphate_atom_is_a_pure_element_check() -> None:
+    """A ligand's phosphorus atom still matches.
+
+    Filtering out non-lipid atoms is estimate_membrane_geometry's job (via
+    lipid_resnames), not this function's -- it only checks the element.
+    """
+    atom = gemmi.Atom()
+    atom.name = "P1"
+    atom.element = gemmi.Element("P")
+
+    assert _is_phosphate_atom(atom) is True
+
+
 def test_estimate_membrane_geometry_ignores_contaminant_p_residue() -> None:
     """Contaminant lipid-like residues must not leak into the phosphate count.
 
