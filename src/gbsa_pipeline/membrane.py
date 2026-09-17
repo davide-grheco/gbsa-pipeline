@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import MDAnalysis as mda  # noqa: N813 -- `mda` is the standard alias used throughout MDAnalysis's own docs
+import MDAnalysis as mda
 import numpy as np
 from MDAnalysis.analysis.leaflet import LeafletFinder
 
