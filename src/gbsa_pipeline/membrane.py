@@ -43,9 +43,6 @@ DEFAULT_LIPID_RESNAMES: frozenset[str] = frozenset(
     }
 )
 
-# Minimum meaningful number of lipids per leaflet.
-_MIN_PHOSPHATES_PER_LEAFLET = 5
-
 # A bilayer has exactly two leaflets.
 _N_LEAFLETS = 2
 
@@ -106,9 +103,9 @@ def estimate_membrane_geometry(
     finder = LeafletFinder(universe, phosphates, cutoff=cutoff)
     groups = finder.groups()
 
-    if len(groups) != _N_LEAFLETS or min(len(group) for group in groups) < _MIN_PHOSPHATES_PER_LEAFLET:
+    if len(groups) != _N_LEAFLETS:
         raise ValueError(
-            "Phosphate atoms did not split into two comparable leaflets. "
+            "Phosphate atoms did not split into two leaflets. "
             "The structure may not contain a symmetric bilayer, or the "
             "lipid residue names may be incorrect."
         )
