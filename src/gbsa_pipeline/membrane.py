@@ -93,10 +93,6 @@ def estimate_membrane_geometry(
 ) -> MembraneGeometry:
     """Measure bilayer parameters from lipid phosphate atoms.
 
-    ``structure`` must already be parsed (e.g. via ``gemmi.read_structure``)
-    so that file-parsing errors are handled by the caller, separately from
-    the geometry-computation errors raised here.
-
     Phosphorus atoms are identified by comparing each atom's element symbol
     to "P" and grouped into two leaflets using MDAnalysis's LeafletFinder, a
     distance-based graph clustering.

@@ -78,11 +78,7 @@ def test_estimate_membrane_geometry_raises_when_no_phosphates_found() -> None:
 
 
 def test_membrane_geometry_pb_params() -> None:
-    """pb_params() bridges a measured geometry into gmx_MMPBSA's membrane PBParams.
-
-    Not wired into the MMPBSA stage yet (planned for a follow-up PR once that
-    stage gains membrane support) -- this proves it's correct in the meantime.
-    """
+    """pb_params() bridges a measured geometry into gmx_MMPBSA's membrane PBParams."""
     geometry = MembraneGeometry(mctrdz=50.0, mthick=39.4, n_phosphates=209)
 
     params = geometry.pb_params()
