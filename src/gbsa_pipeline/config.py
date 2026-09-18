@@ -9,6 +9,7 @@ import tomllib
 from pydantic import BaseModel, ConfigDict, Field
 
 from gbsa_pipeline.mdp import GromacsParams
+from gbsa_pipeline.membrane import DEFAULT_LIPID_RESNAMES
 from gbsa_pipeline.parametrization import ParametrizationConfig, ParametrizationInput
 from gbsa_pipeline.solvation_box import BoxShape, SolvationParams
 
@@ -29,6 +30,23 @@ class SolvationConfig(SolvationParams):
     shape: BoxShape = BoxShape.TRUNCATED_OCTAHEDRON
     padding: float | None = Field(default=None, ge=0.0)
     ion_concentration: float | None = Field(default=0.15, ge=0.0)
+
+
+class MembraneSystemConfig(BaseModel):
+    """[membrane system]- start already from pre-built protein in bilayer system.
+
+    Structure/topology are alredy a complete pre-equilibrated lipid bilayer system.
+    'solvate=True' (the common backmapping case) runs the solvation stage.
+    'solvate=False' the pipeline skips solvation step (structure is already solvated).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    gro_file: Path
+    top_file: Path
+    solvate: bool = True
+    lipid_resnames: frozenset[str] = frozenset(DEFAULT_LIPID_RESNAMES)
+    z_padding_nm: float = Field(default=1.5, ge=0.0)  # only used when solvate is True
 
 
 class MinimizationConfig(BaseModel):

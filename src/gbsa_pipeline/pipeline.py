@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Callable, TypeVar
 import BioSimSpace as BSS
 
 from gbsa_pipeline.md import (
+    npt_barostat_overrides,
     remove_clashing_solvent_waters,
     run_heating,
     run_minimization,
@@ -115,11 +116,18 @@ def _stage_solvate(
 
 def _stage_minimize_sd(config: RunConfig, system: Any, stage_dir: Path) -> Any:
     """Steepest-descent energy minimization."""
-    logger.info("  nsteps=%d  emtol=%.1f kJ/mol/nm", config.minimization.nsteps, config.minimization.emtol)
+    logger.info(
+        "  nsteps=%d  emtol=%.1f kJ/mol/nm",
+        config.minimization.nsteps,
+        config.minimization.emtol,
+    )
     return run_minimization(
         system,
         work_dir=stage_dir,
-        params={"nsteps": config.minimization.nsteps, "emtol": config.minimization.emtol},
+        params={
+            "nsteps": config.minimization.nsteps,
+            "emtol": config.minimization.emtol,
+        },
     )
 
 
@@ -147,10 +155,27 @@ def _stage_nvt_restrained(config: RunConfig, system: Any, stage_dir: Path) -> An
 
 
 def _stage_npt(config: RunConfig, system: Any, stage_dir: Path, *, restraint: str | None = None) -> Any:
-    """NPT equilibration, optionally with backbone restraints."""
-    logger.info("  %.1f ps  restraint=%s", config.npt_equilibration.simulation_time_ps, restraint or "none")
+    """NPT equilibration, optionally with backbone restraints.
+
+    Uses the same barostat as the [md] section so a memprot configured with
+    pcouple = semiisotropic gets consistent, not isotropic, values during
+    equilibration.
+    """
+    logger.info(
+        "  %.1f ps  restraint=%s  pcoupltype=%s",
+        config.npt_equilibration.simulation_time_ps,
+        restraint or "none",
+        config.md.pcoupltype,
+    )
+
     npt_time = config.npt_equilibration.simulation_time_ps * BSS.Units.Time.picosecond
-    return run_npt_equilibration(npt_time, system, work_dir=stage_dir, restraint=restraint)
+    return run_npt_equilibration(
+        npt_time,
+        system,
+        work_dir=stage_dir,
+        restraint=restraint,
+        params=npt_barostat_overrides(config.md),
+    )
 
 
 def _stage_production(config: RunConfig, system: Any, stage_dir: Path) -> Any:
@@ -216,7 +241,11 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
         lambda d: _stage_minimize_sd(config, system, d),
     )
     system = _run_md_stage(
-        "Stage 4/8: CG Minimization", "cg_minimization", "04_cg", output_dir, lambda d: _stage_minimize_cg(system, d)
+        "Stage 4/8: CG Minimization",
+        "cg_minimization",
+        "04_cg",
+        output_dir,
+        lambda d: _stage_minimize_cg(system, d),
     )
     system = _run_md_stage(
         "Stage 5/8: NVT Restrained Heating",
@@ -233,7 +262,11 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
         lambda d: _stage_npt(config, system, d, restraint="backbone"),
     )
     system = _run_md_stage(
-        "Stage 7/8: NPT Equilibration", "npt", "07_npt", output_dir, lambda d: _stage_npt(config, system, d)
+        "Stage 7/8: NPT Equilibration",
+        "npt",
+        "07_npt",
+        output_dir,
+        lambda d: _stage_npt(config, system, d),
     )
     system = _run_md_stage(
         "Stage 8/8: Production MD",

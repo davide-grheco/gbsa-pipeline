@@ -128,6 +128,27 @@ _NPT_STABILITY_PARAMS: dict[str, Any] = {
     "constraint_algorithm": "LINCS",
     "lincs_order": 4,
 }
+# Deliberate, narrow exception to the "BSS owns barostat settings" policy
+# described above: NPT equilibration must use the *same*
+# pcoupl/pcoupltype/tau_p/ref_p/compressibility as the production [md]
+# section, not BSS's own defaults. Mismatched settings are mostly harmless
+# for plain isotropic coupling, but for semiisotropic (membrane) coupling a
+# mismatch would let the box relax differently during equilibration than
+# production, leaving residual anisotropic stress. This is an explicit
+# allowlist rather than copying all of md_params so that production-only
+# fields (e.g. nsteps) never leak into the NPT equilibration stage.
+_BAROSTAT_FIELDS = ("pcoupl", "pcoupltype", "tau_p", "ref_p", "compressibility")
+
+
+def npt_barostat_overrides(md_params: GromacsParams) -> GromacsParams:
+    """Return NPT stability overrides using the same barostat settings as ``[md]``.
+
+    See the ``_BAROSTAT_FIELDS`` comment above for why only the barostat
+    fields (not all of ``md_params``) are carried over.
+    """
+    barostat_fields = {field: getattr(md_params, field) for field in _BAROSTAT_FIELDS}
+    return GromacsParams(**_NPT_STABILITY_PARAMS, **barostat_fields)
+
 
 _SOLVENT_RELAX_PARAMS: dict[str, Any] = {
     # sd integrator: damps velocity spikes in waters that were placed too

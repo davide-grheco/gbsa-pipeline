@@ -28,7 +28,7 @@ import re
 from collections.abc import Mapping
 from enum import Enum
 from tempfile import NamedTemporaryFile
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -69,6 +69,7 @@ __all__ = [
     "LJPMECombination",
     "NghCutoffScheme",
     "PCoupleType",
+    "SemiisotropicValue",
     "Thermostat",
     "VDWModifier",
     "VDWType",
@@ -116,6 +117,8 @@ def format_gmx_value(value: Any) -> str:
         return str(value)
     if isinstance(value, str):
         return value.strip()
+    if isinstance(value, (list, tuple)):
+        return " ".join(format_gmx_value(v) for v in value)  # GROMACS expects multi-value keys for membrane proteins
     raise TypeError(f"Unsupported .mdp value type: {type(value).__name__}")
 
 
@@ -145,7 +148,11 @@ def set_mdp_key(lines: list[str], key: str, value: Any) -> list[str]:
             continue
         indent, _, eq_ws, comment = m.groups()
         suffix = f"  {comment}" if comment else ""
-        return [*lines[:i], f"{indent}{wanted}{eq_ws}{mdp_value}{suffix}", *lines[i + 1 :]]
+        return [
+            *lines[:i],
+            f"{indent}{wanted}{eq_ws}{mdp_value}{suffix}",
+            *lines[i + 1 :],
+        ]
 
     return [*lines, f"{wanted:<28} = {mdp_value}"]
 
@@ -153,6 +160,18 @@ def set_mdp_key(lines: list[str], key: str, value: Any) -> list[str]:
 # ---------------------------------------------------------------------------
 # GromacsParams
 # ---------------------------------------------------------------------------
+
+
+class SemiisotropicValue(NamedTuple):
+    """Two-component GROMACS coupling value for semiisotropic pressure coupling.
+
+    GROMACS expects two space-separated numbers for ``ref_p``/``compressibility``
+    when ``pcoupltype = semiisotropic``: one for the membrane plane (``lateral``,
+    i.e. x=y) and one for the membrane normal (``normal``, i.e. z).
+    """
+
+    lateral: float
+    normal: float
 
 
 class GromacsParams(BaseModel):
@@ -255,8 +274,9 @@ class GromacsParams(BaseModel):
     pcoupl: Barostat = Barostat.NO
     pcoupltype: PCoupleType = PCoupleType.ISOTROPIC
     tau_p: float = 2.0
-    ref_p: float = 1.0
-    compressibility: float = 4.5e-5
+    # SemiisotropicValue allowed for anisotropic barostat coupling for membrane calculations.
+    ref_p: float | SemiisotropicValue = 1.0
+    compressibility: float | SemiisotropicValue = 4.5e-5
     refcoord_scaling: str = "No"
 
     # Thermostat

@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from gbsa_pipeline.cli import main as cli_main
 from gbsa_pipeline.config import (
+    MembraneSystemConfig,
     RunConfig,
     SolvationConfig,
     SystemConfig,
@@ -300,3 +301,27 @@ def test_cli_custom_output_dir(tmp_path: Path) -> None:
     mock_run.assert_called_once()
     _, parsed_output_dir = mock_run.call_args.args
     assert parsed_output_dir == output_dir
+
+
+def test_membrane_system_config_defaults(tmp_path: Path) -> None:
+    gro = tmp_path / "system.gro"
+    top = tmp_path / "system.top"
+    gro.write_text("", encoding="utf-8")
+    top.write_text("", encoding="utf-8")
+
+    cfg = MembraneSystemConfig(gro_file=gro, top_file=top)
+
+    assert cfg.solvate is True
+    assert cfg.z_padding_nm == 1.5
+    assert "POPC" in cfg.lipid_resnames
+
+
+def test_membrane_system_config_extra_field_forbiodden(tmp_path: Path) -> None:
+
+    gro = tmp_path / "system.gro"
+    top = tmp_path / "system.top"
+    gro.write_text("", encoding="utf-8")
+    top.write_text("", encoding="utf-8")
+
+    with pytest.raises(ValidationError):
+        MembraneSystemConfig(gro_file=gro, top_file=top, bad_field="x")  # type: ignore[call-arg]

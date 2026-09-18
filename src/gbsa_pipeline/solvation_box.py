@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Self
 
+import BioSimSpace as BSS
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
@@ -200,6 +201,40 @@ def _make_bss_box(bss: Any, shape: BoxShape, size_nm: float) -> tuple[Any, Any]:
         return bss.Box.truncatedOctahedron(size)
 
     raise ValueError(f"Unsupported solvation box shape: {shape!s}")
+
+
+def solvate_membrane(
+    system: Any,
+    params: SolvationParams,
+    z_padding_nm: float,
+    work_dir: Path | None = None,
+) -> Any:
+    """Solvate a pre-built membrane-system with BioSimSpace.
+
+    Unlike run_solvation (isotropic padding), this preserves x&y from the inputs system's own box extending only the z-vector.
+    """
+    dimensions = system._sire_object.property("space").dimensions()  # Å
+    x, y, z = (dimension.value() / 10 for dimension in dimensions)  # nm
+    new_box = [
+        x * BSS.Units.Length.nanometer,
+        y * BSS.Units.Length.nanometer,
+        (z + 2 * z_padding_nm) * BSS.Units.Length.nanometer,
+    ]
+
+    system.setBox(new_box, angles=[90 * BSS.Units.Angle.degree] * 3)
+
+    solvent = _get_bss_solvent_function(BSS, params.water_model)
+    kwargs: dict[str, Any] = {
+        "molecule": system,
+        "is_neutral": params.neutralize,
+    }
+
+    if params.ion_concentration is not None:
+        kwargs["ion_conc"] = params.ion_concentration
+    if work_dir is not None:
+        kwargs["work_dir"] = str(work_dir)
+
+    return solvent(**kwargs)
 
 
 def _get_bss_solvent_function(bss: Any, water_model: WaterModel) -> Any:
