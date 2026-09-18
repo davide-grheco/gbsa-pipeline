@@ -167,9 +167,7 @@ class SemiisotropicValue(NamedTuple):
 
     GROMACS expects two space-separated numbers for ``ref_p``/``compressibility``
     when ``pcoupltype = semiisotropic``: one for the membrane plane (``lateral``,
-    i.e. x=y) and one for the membrane normal (``normal``, i.e. z). A bare
-    ``tuple[float, float]`` doesn't say which number means which — GROMACS
-    silently applies the wrong pressure axis if lateral/normal get swapped.
+    i.e. x=y) and one for the membrane normal (``normal``, i.e. z).
     """
 
     lateral: float
