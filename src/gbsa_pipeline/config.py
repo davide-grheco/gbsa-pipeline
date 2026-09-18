@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import tomllib
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from gbsa_pipeline.mdp import GromacsParams
 from gbsa_pipeline.membrane import DEFAULT_LIPID_RESNAMES
@@ -44,6 +44,8 @@ class MembraneSystemConfig(BaseModel):
 
     gro_file: Path
     top_file: Path
+    ligand: Path
+    net_charge: int | None = None
     solvate: bool = True
     lipid_resnames: frozenset[str] = frozenset(DEFAULT_LIPID_RESNAMES)
     z_padding_nm: float = Field(default=1.5, ge=0.0)  # only used when solvate is True
@@ -113,13 +115,26 @@ class RunConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    system: SystemConfig
+    system: SystemConfig | None = None
+    membrane: MembraneSystemConfig | None = None
     forcefield: ParametrizationConfig = Field(default_factory=ParametrizationConfig)
     solvation: SolvationConfig = Field(default_factory=SolvationConfig)
     minimization: MinimizationConfig = Field(default_factory=MinimizationConfig)
     equilibration: EquilibrationConfig = Field(default_factory=EquilibrationConfig)
     npt_equilibration: NptConfig = Field(default_factory=NptConfig)
     md: GromacsParams = Field(default_factory=GromacsParams)
+
+    @model_validator(mode="after")
+    def _validate_exactly_one_system_source(self) -> Self:
+        """Exactly one of [system] or [membrane] must be set.
+
+        [system] builds a solvated complex from a bare protein PDB while
+        [membrane] starts from an already-prepared protein-lipid system
+        and only handles the ligand.
+        """
+        if (self.system is None) == (self.membrane is None):
+            raise ValueError("Exactly one of [system] or [membrane] must be set.")
+        return self
 
     @classmethod
     def from_toml(cls, path: Path) -> RunConfig:
@@ -157,6 +172,11 @@ class RunConfig(BaseModel):
         ValueError
             If ``system.ligand`` is ``None`` (ligand is required for parametrization).
         """
+        if self.system is None:
+            raise ValueError(
+                "to_parametrization_input requires [system] to be set. [membrane] uses a different code path."
+            )
+
         if self.system.ligand is None:
             raise ValueError(
                 "system.ligand must be set to run the parametrization stage. "

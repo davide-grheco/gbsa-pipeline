@@ -59,6 +59,7 @@ def test_from_toml_minimal(tmp_path: Path) -> None:
 
     cfg = RunConfig.from_toml(toml)
 
+    assert cfg.system is not None
     assert cfg.system.protein == protein
     assert cfg.system.ligand is None
     assert cfg.forcefield.protein_ff == ProteinFF.FF14SB
@@ -108,6 +109,7 @@ def test_from_toml_full(tmp_path: Path) -> None:
 
     cfg = RunConfig.from_toml(toml)
 
+    assert cfg.system is not None
     assert cfg.system.ligand == ligand
     assert cfg.system.net_charge == -1
     assert cfg.forcefield.protein_ff == ProteinFF.FF19SB
@@ -306,10 +308,12 @@ def test_cli_custom_output_dir(tmp_path: Path) -> None:
 def test_membrane_system_config_defaults(tmp_path: Path) -> None:
     gro = tmp_path / "system.gro"
     top = tmp_path / "system.top"
+    ligand = tmp_path / "ligand.sdf"
     gro.write_text("", encoding="utf-8")
     top.write_text("", encoding="utf-8")
+    ligand.write_text("", encoding="utf-8")
 
-    cfg = MembraneSystemConfig(gro_file=gro, top_file=top)
+    cfg = MembraneSystemConfig(gro_file=gro, top_file=top, ligand=ligand)
 
     assert cfg.solvate is True
     assert cfg.z_padding_nm == 1.5
@@ -320,8 +324,10 @@ def test_membrane_system_config_extra_field_forbiodden(tmp_path: Path) -> None:
 
     gro = tmp_path / "system.gro"
     top = tmp_path / "system.top"
+    ligand = tmp_path / "ligand.sdf"
     gro.write_text("", encoding="utf-8")
     top.write_text("", encoding="utf-8")
+    ligand.write_text("", encoding="utf-8")
 
     with pytest.raises(ValidationError):
-        MembraneSystemConfig(gro_file=gro, top_file=top, bad_field="x")  # type: ignore[call-arg]
+        MembraneSystemConfig(gro_file=gro, top_file=top, ligand=ligand, bad_field="x")  # type: ignore[call-arg]
