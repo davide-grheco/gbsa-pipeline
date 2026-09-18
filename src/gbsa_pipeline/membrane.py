@@ -7,6 +7,7 @@ for PB calculations directly from lipid phosphate atoms.
 from __future__ import annotations
 
 import logging
+import string
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -146,12 +147,38 @@ def extract_receptor_pdb(
     gro_file: Path,
     output_pdb: Path,
 ) -> Path:
-    """Extract receptor pdb file."""
+    """Extract a protein-only receptor PDB from a pre-built [membrane] system.
+
+    Docking tools treat the receptor as rigid with no membrane representation
+    -- lipids/water only matter for box placement and downstream MD, not for
+    the docking score itself, so they are stripped here.
+
+    GRO files carry no chain IDs, and a system built by excising a fusion
+    protein (e.g. T4-lysozyme from a GPCR's ICL3) can leave the receptor as
+    multiple polypeptide chains that are each independently renumbered from
+    residue 1. Writing them all under one blank chain ID makes residue
+    numbers collide across chains, which breaks downstream PDB parsers (e.g.
+    Meeko's Polymer, which requires each chain:resid to be unique). A resid
+    decrease is therefore treated as a new-chain boundary and each detected
+    chain is given its own letter.
+    """
     universe = mda.Universe(str(gro_file))
     protein = universe.select_atoms("protein")
 
     if protein.n_atoms == 0:
-        raise ValueError("No proteins found in {gro_file}.")
+        raise ValueError(f"No protein atoms found in {gro_file}.")
+
+    chain_ids = []
+    current_chain = 0
+    prev_resid = None
+    for resid in protein.resids:
+        if prev_resid is not None and resid < prev_resid:
+            current_chain += 1
+        chain_ids.append(string.ascii_uppercase[current_chain])
+        prev_resid = resid
+
+    universe.add_TopologyAttr("chainIDs")
+    protein.chainIDs = chain_ids
 
     protein.write(str(output_pdb))
     return output_pdb
