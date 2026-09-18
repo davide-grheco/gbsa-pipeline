@@ -82,7 +82,7 @@ def estimate_membrane_geometry(
     cutoff: float = 15.0,
 ) -> MembraneGeometry:
     """Measure bilayer parameters from lipid phosphate atoms.
-    
+
     Phosphate atoms are selected directly through MDAnalysis's own selection
     language, combining lipid residue names with a "P*" atom-name wildcard
     (real force-field topologies number phosphate atoms, e.g. "P8", "P31"),
