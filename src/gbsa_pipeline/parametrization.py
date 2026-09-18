@@ -32,6 +32,7 @@ __all__ = [
     "parameterise_ligand_gaff2",
     "parameterise_protein_amber",
     "parametrize",
+    "parametrize_ligand_only",
 ]
 
 
@@ -127,7 +128,7 @@ def parameterise_ligand_gaff2(
     charge_method: str = "BCC",
     work_dir: PathLike | None = None,
 ) -> BSS._SireWrappers.Molecule:
-    """Parameterise a ligand via BioSimSpace/antechamber (GAFF2).
+    """Parameterize a ligand via BioSimSpace/antechamber (GAFF2).
 
     Returns a BSS Molecule suitable for use with the BSS solvation and MD
     pipeline. For the OpenMM-based path use :func:`parametrize`.
@@ -202,3 +203,20 @@ def export_gromacs_top_gro(
     BSS.IO.saveMolecules(str(out_top), system, fileformat="grotop")
 
     return [out_gro, out_top]
+
+
+def parametrize_ligand_only(
+    ligand_sdf: PathLike,
+    net_charge: int | None = None,
+    charge_method: str = "BCC",
+    work_dir: PathLike | None = None,
+) -> BSS._SireWrappers.Molecule:
+    """Parametrize a ligand in isolation for [membrane] systems."""
+    ligand = BSS.IO.readMolecules(str(ligand_sdf)).getMolecules()[0]
+
+    return parameterise_ligand_gaff2(
+        ligand,
+        net_charge=net_charge,
+        charge_method=charge_method,
+        work_dir=work_dir,
+    )
