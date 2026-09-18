@@ -18,13 +18,15 @@ from gbsa_pipeline.md import (
     run_solvent_relaxation,
 )
 from gbsa_pipeline.md_io import save_bss_system_to_gromacs
+from gbsa_pipeline.membrane import merge_ligand_into_system, parametrize_ligand_only
 from gbsa_pipeline.parametrization import parametrize
+from gbsa_pipeline.solvation_box import solvate_membrane
 from gbsa_pipeline.solvation_bss import solvate_bss
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from gbsa_pipeline.config import RunConfig
+    from gbsa_pipeline.config import MembraneSystemConfig, RunConfig
     from gbsa_pipeline.parametrization import ParametrisedComplex
 
 logger = logging.getLogger(__name__)
@@ -112,6 +114,50 @@ def _stage_solvate(
     system = solvated.load_bss()
     logger.info("  Loaded %d molecules (%d atoms)", system.nMolecules(), system.nAtoms())
     return system
+
+
+def _stage_parametrize_membrane(config: RunConfig, stage_dir: Path) -> Any:
+    """Load a pre-built [membrane] system and merge with parametrised ligand."""
+    membrane: MembraneSystemConfig | None = config.membrane
+    if membrane is None:
+        raise ValueError("stage parametrize_membrane requires membrane to be set.")
+
+    logger.info(
+        "gro_file=%s  top_file=%s ligand=%s net_charge=%s",
+        membrane.gro_file.name,
+        membrane.top_file.name,
+        membrane.ligand.name,
+        membrane.net_charge,
+    )
+    system = BSS.IO.readMolecules(
+        [str(membrane.gro_file), str(membrane.top_file)],
+        make_whole=True,
+    )
+    ligand = parametrize_ligand_only(
+        membrane.ligand,
+        net_charge=membrane.net_charge,
+        work_dir=stage_dir,
+    )
+    return merge_ligand_into_system(system, ligand)
+
+
+def _stage_solvate_membrane(config: RunConfig, system: Any, stage_dir: Path) -> Any:
+    """Solvate a membrane system, or pass it through unchanged if already solvated."""
+    membrane = config.membrane
+    if membrane is None:
+        raise ValueError("_stage_solvate_membrane requires [membrane] to be set.")
+
+    if not membrane.solvate:
+        logger.info("solvate=False - system is already solvated, skipping.")
+        return system
+
+    logger.info("z_padding=%.2f nm water_models=%s.", membrane.z_padding, config.solvation.water_model)
+    return solvate_membrane(
+        system=system,
+        params=config.solvation,
+        z_padding=membrane.z_padding,
+        work_dir=stage_dir,
+    )
 
 
 def _stage_minimize_sd(config: RunConfig, system: Any, stage_dir: Path) -> Any:
@@ -222,16 +268,35 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     _log_config(config, output_dir)
 
-    # Stage 1: Parametrize
-    logger.info("─── Stage 1/8: Parametrization ───")
-    param_dir = output_dir / "01_parametrize"
-    parametrized = _run_stage("parametrize", lambda: _stage_parametrize(config, param_dir))
-    logger.info("  Done → %s, %s", parametrized.gro_file.name, parametrized.top_file.name)
+    if config.membrane is not None:
+        # Stage 1: Parametrize ligand + merge into pre-built membrane system
+        logger.info("─── Stage 1/8: Ligand parametrization + membrane merge ───")
+        param_dir = output_dir / "01_parametrize"
+        param_dir.mkdir(parents=True, exist_ok=True)
+        system = _run_stage(
+            "parametrize_membrane",
+            lambda: _stage_parametrize_membrane(config, param_dir),
+        )
 
-    # Stage 2: Solvate
-    logger.info("─── Stage 2/8: Solvation ───")
-    sol_dir = output_dir / "02_solvated"
-    system = _run_stage("solvation", lambda: _stage_solvate(config, parametrized, sol_dir))
+        # Stage 2: Solvate (membrane-aware, or skip if already solvated)
+        logger.info("─── Stage 2/8: Membrane solvation ───")
+        sol_dir = output_dir / "02_solvated"
+        sol_dir.mkdir(parents=True, exist_ok=True)
+        system = _run_stage(
+            "solvate_membrane",
+            lambda: _stage_solvate_membrane(config, system, sol_dir),
+        )
+    else:
+        # Stage 1: Parametrize
+        logger.info("─── Stage 1/8: Parametrization ───")
+        param_dir = output_dir / "01_parametrize"
+        parametrized = _run_stage("parametrize", lambda: _stage_parametrize(config, param_dir))
+        logger.info("  Done → %s, %s", parametrized.gro_file.name, parametrized.top_file.name)
+
+        # Stage 2: Solvate
+        logger.info("─── Stage 2/8: Solvation ───")
+        sol_dir = output_dir / "02_solvated"
+        system = _run_stage("solvation", lambda: _stage_solvate(config, parametrized, sol_dir))
 
     system = _run_md_stage(
         "Stage 3/8: SD Minimization",
