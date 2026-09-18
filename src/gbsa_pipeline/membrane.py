@@ -10,6 +10,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import MDAnalysis as mda
 import numpy as np
 from MDAnalysis.analysis.leaflet import LeafletFinder
 
@@ -18,16 +19,17 @@ from gbsa_pipeline.parametrization import parametrize_ligand_only
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
     from typing import Any
 
     import BioSimSpace as BSS
-    import MDAnalysis as mda
 
 logger = logging.getLogger(__name__)
 __all__ = [
     "DEFAULT_LIPID_RESNAMES",
     "MembraneGeometry",
     "estimate_membrane_geometry",
+    "extract_receptor_pdb",
     "merge_ligand_into_system",
     "parametrize_ligand_only",
 ]
@@ -141,6 +143,21 @@ def estimate_membrane_geometry(
         mthick=mthick,
         n_phosphates=len(phosphates),
     )
+
+
+def extract_receptor_pdb(
+    gro_file: Path,
+    output_pdb: Path,
+) -> Path:
+    """Extract receptor pdb file."""
+    universe = mda.Universe(str(gro_file))
+    protein = universe.select_atoms("protein")
+
+    if protein.n_atoms == 0:
+        raise ValueError("No proteins found in {gro_file}.")
+
+    protein.write(str(output_pdb))
+    return output_pdb
 
 
 def merge_ligand_into_system(
