@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import Any
 
+    import BioSimSpace as BSS
     import MDAnalysis as mda
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ __all__ = [
     "DEFAULT_LIPID_RESNAMES",
     "MembraneGeometry",
     "estimate_membrane_geometry",
+    "merge_ligand_into_system",
     "parametrize_ligand_only",
 ]
 
@@ -136,3 +138,12 @@ def estimate_membrane_geometry(
         mthick=mthick,
         n_phosphates=len(phosphates),
     )
+
+
+def merge_ligand_into_system(
+    system: BSS._SireWrappers.System,
+    ligand: BSS._SireWrappers.Molecule,
+) -> BSS._SireWrappers.System:
+    """Merge a parametrised ligand into a pre-built membrane system."""
+    system.addMolecules(ligand)
+    return system

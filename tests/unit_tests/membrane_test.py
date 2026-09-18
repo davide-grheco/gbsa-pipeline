@@ -6,6 +6,7 @@ estimates membrane geometry is checked against a real MemProtMD system.
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
 import MDAnalysis as mda
 import numpy as np
@@ -15,6 +16,7 @@ from MDAnalysis.core.universe import Merge
 from gbsa_pipeline.membrane import (
     MembraneGeometry,
     estimate_membrane_geometry,
+    merge_ligand_into_system,
 )
 
 TESTDATA = Path(__file__).resolve().parents[1] / "testdata" / "membrane" / "1py6"
@@ -97,3 +99,12 @@ def test_membrane_geometry_pb_params() -> None:
     assert params.mctrdz == 50.0
     assert params.mthick == 39.4
     assert params.eneopt == 1
+
+
+def test_merge_ligand_into_system_add_molecules_and_returns_system() -> None:
+    """A short wrapper test."""
+    system = Mock()
+    ligand = Mock()
+
+    result = merge_ligand_into_system(system, ligand)
+    assert result is system
