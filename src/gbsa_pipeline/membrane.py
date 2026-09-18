@@ -14,6 +14,7 @@ import numpy as np
 from MDAnalysis.analysis.leaflet import LeafletFinder
 
 from gbsa_pipeline.mmbsa import PBParams
+from gbsa_pipeline.parametrization import parametrize_ligand_only
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -22,6 +23,12 @@ if TYPE_CHECKING:
     import MDAnalysis as mda
 
 logger = logging.getLogger(__name__)
+__all__ = [
+    "DEFAULT_LIPID_RESNAMES",
+    "MembraneGeometry",
+    "estimate_membrane_geometry",
+    "parametrize_ligand_only",
+]
 
 
 # Common phospholipid residue names used in PDB files.
