@@ -172,7 +172,7 @@ def test_solvate_membrane_preserves_lateral_box(tmp_path: Path) -> None:
     dims_before = [dimension.value() for dimension in system._sire_object.property("space").dimensions()]
 
     params = SolvationParams(water_model=WaterModel.TIP3P, ion_concentration=0.15, neutralize=True)
-    solvated = solvate_membrane(system=system, params=params, z_padding=1.5, work_dir=tmp_path)
+    solvated = solvate_membrane(system=system, params=params, z_padding_nm=1.5, work_dir=tmp_path)
 
     dims_after = [dimension.value() for dimension in solvated._sire_object.property("space").dimensions()]
 

@@ -206,7 +206,7 @@ def _make_bss_box(bss: Any, shape: BoxShape, size_nm: float) -> tuple[Any, Any]:
 def solvate_membrane(
     system: Any,
     params: SolvationParams,
-    z_padding: float,
+    z_padding_nm: float,
     work_dir: Path | None = None,
 ) -> Any:
     """Solvate a pre-built membrane-system with BioSimSpace.
@@ -218,7 +218,7 @@ def solvate_membrane(
     new_box = [
         x * BSS.Units.Length.nanometer,
         y * BSS.Units.Length.nanometer,
-        (z + 2 * z_padding) * BSS.Units.Length.nanometer,
+        (z + 2 * z_padding_nm) * BSS.Units.Length.nanometer,
     ]
 
     system.setBox(new_box, angles=[90 * BSS.Units.Angle.degree] * 3)

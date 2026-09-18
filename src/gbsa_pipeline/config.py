@@ -46,7 +46,7 @@ class MembraneSystemConfig(BaseModel):
     top_file: Path
     solvate: bool = True
     lipid_resnames: frozenset[str] = frozenset(DEFAULT_LIPID_RESNAMES)
-    z_padding_nm: float = Field(default=1.5, ge=0.0)  # nm, only used when not pre_solvated
+    z_padding_nm: float = Field(default=1.5, ge=0.0)  # only used when solvate is True
 
 
 class MinimizationConfig(BaseModel):
