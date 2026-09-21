@@ -6,7 +6,6 @@ estimates membrane geometry is checked against a real MemProtMD system.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import Mock
 
 import MDAnalysis as mda
 import numpy as np
@@ -17,7 +16,6 @@ from gbsa_pipeline.membrane import (
     MembraneGeometry,
     estimate_membrane_geometry,
     extract_receptor_pdb,
-    merge_ligand_into_system,
 )
 
 TESTDATA = Path(__file__).resolve().parents[1] / "testdata" / "membrane" / "1py6"
@@ -114,12 +112,3 @@ def test_extract_receptor_pdb(tmp_path: Path) -> None:
     written = mda.Universe(str(output_pdb))
     assert written.atoms.n_atoms == 4597
     assert "POP" not in set(written.atoms.resnames)
-
-
-def test_merge_ligand_into_system_add_molecules_and_returns_system() -> None:
-    """A short wrapper test."""
-    system = Mock()
-    ligand = Mock()
-
-    result = merge_ligand_into_system(system, ligand)
-    assert result is system

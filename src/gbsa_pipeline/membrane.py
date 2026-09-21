@@ -22,15 +22,12 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any
 
-    import BioSimSpace as BSS
-
 logger = logging.getLogger(__name__)
 __all__ = [
     "DEFAULT_LIPID_RESNAMES",
     "MembraneGeometry",
     "estimate_membrane_geometry",
     "extract_receptor_pdb",
-    "merge_ligand_into_system",
 ]
 
 
@@ -180,12 +177,3 @@ def extract_receptor_pdb(
 
     protein.write(str(output_pdb))
     return output_pdb
-
-
-def merge_ligand_into_system(
-    system: BSS._SireWrappers.System,
-    ligand: BSS._SireWrappers.Molecule,
-) -> BSS._SireWrappers.System:
-    """Merge a parametrised ligand into a pre-built membrane system."""
-    system.addMolecules(ligand)
-    return system

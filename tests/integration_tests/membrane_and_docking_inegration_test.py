@@ -17,10 +17,7 @@ from gbsa_pipeline.docking import (
     load_first_sdf_molecule,
     prepare_ligand_with_meeko,
 )
-from gbsa_pipeline.membrane import (
-    extract_receptor_pdb,
-    merge_ligand_into_system,
-)
+from gbsa_pipeline.membrane import extract_receptor_pdb
 from gbsa_pipeline.parametrization import parameterise_ligand_gaff2
 from gbsa_pipeline.solvation_box import SolvationParams, WaterModel, solvate_membrane
 
@@ -72,17 +69,17 @@ def test_membrane_docking_to_gbsa_prep_chain(tmp_path: Path) -> None:
             str(TESTDATA / "system_unsolvated.gro"),
             str(TESTDATA / "system_unsolvated.top"),
         ],
-        make_waramethole=True,
+        make_whole=True,
     )
     n_atoms_before = system.nAtoms()
 
-    ligand_mol = load_first_sdf_molecule(docked_sdf, remove_hs=False)
+    ligand_mol = BSS.IO.readMolecules(str(docked_sdf)).getMolecules()[0]
     ligand = parameterise_ligand_gaff2(ligand_mol, net_charge=0, work_dir=tmp_path)
-    merged = merge_ligand_into_system(system, ligand)
-    assert merged.nAtoms() > n_atoms_before
+    system.addMolecules(ligand)
+    assert system.nAtoms() > n_atoms_before
 
     solvated = solvate_membrane(
-        system=merged,
+        system=system,
         params=SolvationParams(water_model=WaterModel.TIP3P, ion_concentration=0.15, neutralize=True),
         z_padding_nm=1.5,
         work_dir=tmp_path,
