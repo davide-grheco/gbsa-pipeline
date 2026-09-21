@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 import BioSimSpace as BSS
 
+from gbsa_pipeline.config import MembraneConfig
 from gbsa_pipeline.md import (
     npt_barostat_overrides,
     remove_clashing_solvent_waters,
@@ -26,7 +27,7 @@ from gbsa_pipeline.solvation_bss import solvate_bss
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from gbsa_pipeline.config import MembraneSystemConfig, RunConfig
+    from gbsa_pipeline.config import RunConfig
     from gbsa_pipeline.parametrization import ParametrisedComplex
 
 logger = logging.getLogger(__name__)
@@ -118,24 +119,26 @@ def _stage_solvate(
 
 def _stage_parametrize_membrane(config: RunConfig, stage_dir: Path) -> Any:
     """Load a pre-built [membrane] system and merge with parametrised ligand."""
-    membrane: MembraneSystemConfig | None = config.membrane
-    if membrane is None:
-        raise ValueError("stage parametrize_membrane requires membrane to be set.")
+    system_config = config.system
+    if system_config.gro_file is None or system_config.top_file is None:
+        raise ValueError("system.gro_file and system.top_file must be set for a membrane system.")
+    if system_config.ligand is None:
+        raise ValueError("system.ligand must be set to run the membrane parametrization stage.")
 
     logger.info(
         "gro_file=%s  top_file=%s ligand=%s net_charge=%s",
-        membrane.gro_file.name,
-        membrane.top_file.name,
-        membrane.ligand.name,
-        membrane.net_charge,
+        system_config.gro_file.name,
+        system_config.top_file.name,
+        system_config.ligand.name,
+        system_config.net_charge,
     )
     system = BSS.IO.readMolecules(
-        [str(membrane.gro_file), str(membrane.top_file)],
+        [str(system_config.gro_file), str(system_config.top_file)],
         make_whole=True,
     )
     ligand = parametrize_ligand_only(
-        membrane.ligand,
-        net_charge=membrane.net_charge,
+        system_config.ligand,
+        net_charge=system_config.net_charge,
         work_dir=stage_dir,
     )
     return merge_ligand_into_system(system, ligand)
@@ -143,15 +146,12 @@ def _stage_parametrize_membrane(config: RunConfig, stage_dir: Path) -> Any:
 
 def _stage_solvate_membrane(config: RunConfig, system: Any, stage_dir: Path) -> Any:
     """Solvate a membrane system, or pass it through unchanged if already solvated."""
-    membrane = config.membrane
-    if membrane is None:
-        raise ValueError("_stage_solvate_membrane requires [membrane] to be set.")
-
-    if not membrane.solvate:
+    if not config.system.solvate:
         logger.info("solvate=False - system is already solvated, skipping.")
         return system
 
-    logger.info("z_padding_nm=%.2f water_models=%s.", membrane.z_padding_nm, config.solvation.water_model)
+    membrane = config.membrane or MembraneConfig()
+    logger.info("z_padding_nm=%.2f water_model=%s.", membrane.z_padding_nm, config.solvation.water_model)
     return solvate_membrane(
         system=system,
         params=config.solvation,
@@ -268,7 +268,7 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     _log_config(config, output_dir)
 
-    if config.membrane is not None:
+    if config.system.membrane:
         # Stage 1: Parametrize ligand + merge into pre-built membrane system
         logger.info("─── Stage 1/8: Ligand parametrization + membrane merge ───")
         param_dir = output_dir / "01_parametrize"

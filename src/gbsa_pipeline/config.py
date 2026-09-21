@@ -15,13 +15,40 @@ from gbsa_pipeline.solvation_box import BoxShape, SolvationParams
 
 
 class SystemConfig(BaseModel):
-    """[system] section — input files and charge settings."""
+    """[system] section — input files, charge settings, and system type.
+
+    Either ``protein`` (a bare protein PDB to parametrize from scratch) or
+    both ``gro_file``/``top_file`` (an already-built system, e.g. a protein
+    embedded in a lipid bilayer) must be set, but not both. ``membrane=True``
+    marks a pre-built system as a lipid bilayer, so the pipeline branches
+    into membrane-aware ligand-merge and solvation stages; see
+    :class:`MembraneConfig` for the bilayer-specific parameters that apply
+    in that case.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    protein: Path
+    protein: Path | None = None
+    gro_file: Path | None = None
+    top_file: Path | None = None
     ligand: Path | None = None
     net_charge: int | None = None
+    solvate: bool = True
+    membrane: bool = False
+
+    @model_validator(mode="after")
+    def _validate_source(self) -> Self:
+        """Exactly one of protein or (gro_file + top_file) must be set."""
+        has_protein = self.protein is not None
+        has_prebuilt = self.gro_file is not None or self.top_file is not None
+
+        if has_protein == has_prebuilt:
+            raise ValueError("Exactly one of protein or gro_file+top_file must be set.")
+        if has_prebuilt and (self.gro_file is None or self.top_file is None):
+            raise ValueError("gro_file and top_file must both be set together.")
+        if self.membrane and self.protein is not None:
+            raise ValueError("membrane=True requires gro_file/top_file, not a bare protein.")
+        return self
 
 
 class SolvationConfig(SolvationParams):
@@ -32,23 +59,16 @@ class SolvationConfig(SolvationParams):
     ion_concentration: float | None = Field(default=0.15, ge=0.0)
 
 
-class MembraneSystemConfig(BaseModel):
-    """[membrane system]- start already from pre-built protein in bilayer system.
+class MembraneConfig(BaseModel):
+    """[membrane] section — lipid bilayer geometry.
 
-    Structure/topology are alredy a complete pre-equilibrated lipid bilayer system.
-    'solvate=True' (the common backmapping case) runs the solvation stage.
-    'solvate=False' the pipeline skips solvation step (structure is already solvated).
+    Only meaningful when ``[system]`` has ``membrane = true``.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    gro_file: Path
-    top_file: Path
-    ligand: Path
-    net_charge: int | None = None
-    solvate: bool = True
     lipid_resnames: frozenset[str] = frozenset(DEFAULT_LIPID_RESNAMES)
-    z_padding_nm: float = Field(default=1.5, ge=0.0)  # only used when solvate is True
+    z_padding_nm: float = Field(default=1.5, ge=0.0)  # only used when system.solvate is True
 
 
 class MinimizationConfig(BaseModel):
@@ -111,30 +131,32 @@ class RunConfig(BaseModel):
     tcoupl = "v-rescale"
     ref_t = 300.0
     ```
+
+    A pre-built membrane system instead of a bare protein PDB:
+
+    ```toml
+    [system]
+    gro_file = "system.gro"
+    top_file = "system.top"
+    ligand   = "ligand.sdf"
+    membrane = true
+    solvate  = true
+
+    [membrane]
+    z_padding_nm = 1.5
+    ```
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    system: SystemConfig | None = None
-    membrane: MembraneSystemConfig | None = None
+    system: SystemConfig
+    membrane: MembraneConfig | None = None
     forcefield: ParametrizationConfig = Field(default_factory=ParametrizationConfig)
     solvation: SolvationConfig = Field(default_factory=SolvationConfig)
     minimization: MinimizationConfig = Field(default_factory=MinimizationConfig)
     equilibration: EquilibrationConfig = Field(default_factory=EquilibrationConfig)
     npt_equilibration: NptConfig = Field(default_factory=NptConfig)
     md: GromacsParams = Field(default_factory=GromacsParams)
-
-    @model_validator(mode="after")
-    def _validate_exactly_one_system_source(self) -> Self:
-        """Exactly one of [system] or [membrane] must be set.
-
-        [system] builds a solvated complex from a bare protein PDB while
-        [membrane] starts from an already-prepared protein-lipid system
-        and only handles the ligand.
-        """
-        if (self.system is None) == (self.membrane is None):
-            raise ValueError("Exactly one of [system] or [membrane] must be set.")
-        return self
 
     @classmethod
     def from_toml(cls, path: Path) -> RunConfig:
@@ -170,13 +192,14 @@ class RunConfig(BaseModel):
         Raises:
         ------
         ValueError
-            If ``system.ligand`` is ``None`` (ligand is required for parametrization).
+            If ``system.protein`` (pre-built systems use a different code
+            path) or ``system.ligand`` is unset.
         """
-        if self.system is None:
+        if self.system.protein is None:
             raise ValueError(
-                "to_parametrization_input requires [system] to be set. [membrane] uses a different code path."
+                "to_parametrization_input requires system.protein to be set; "
+                "pre-built systems (gro_file/top_file) use a different code path."
             )
-
         if self.system.ligand is None:
             raise ValueError(
                 "system.ligand must be set to run the parametrization stage. "
