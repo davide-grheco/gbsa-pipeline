@@ -80,7 +80,7 @@ def test_membrane_docking_to_gbsa_prep_chain(tmp_path: Path) -> None:
     solvated = solvate_membrane(
         system=merged,
         params=SolvationParams(water_model=WaterModel.TIP3P, ion_concentration=0.15, neutralize=True),
-        z_padding=1.5,
+        z_padding_nm=1.5,
         work_dir=tmp_path,
     )
     assert solvated.getWaterMolecules().nMolecules() > 0

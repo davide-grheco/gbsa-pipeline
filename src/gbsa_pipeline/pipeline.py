@@ -151,11 +151,11 @@ def _stage_solvate_membrane(config: RunConfig, system: Any, stage_dir: Path) -> 
         logger.info("solvate=False - system is already solvated, skipping.")
         return system
 
-    logger.info("z_padding=%.2f nm water_models=%s.", membrane.z_padding, config.solvation.water_model)
+    logger.info("z_padding_nm=%.2f water_models=%s.", membrane.z_padding_nm, config.solvation.water_model)
     return solvate_membrane(
         system=system,
         params=config.solvation,
-        z_padding=membrane.z_padding,
+        z_padding_nm=membrane.z_padding_nm,
         work_dir=stage_dir,
     )
 
