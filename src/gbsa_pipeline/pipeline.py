@@ -19,8 +19,8 @@ from gbsa_pipeline.md import (
     run_solvent_relaxation,
 )
 from gbsa_pipeline.md_io import save_bss_system_to_gromacs
-from gbsa_pipeline.membrane import merge_ligand_into_system, parametrize_ligand_only
-from gbsa_pipeline.parametrization import parametrize
+from gbsa_pipeline.membrane import merge_ligand_into_system
+from gbsa_pipeline.parametrization import parameterise_ligand_gaff2, parametrize
 from gbsa_pipeline.solvation_box import solvate_membrane
 from gbsa_pipeline.solvation_bss import solvate_bss
 
@@ -136,8 +136,9 @@ def _stage_parametrize_membrane(config: RunConfig, stage_dir: Path) -> Any:
         [str(system_config.gro_file), str(system_config.top_file)],
         make_whole=True,
     )
-    ligand = parametrize_ligand_only(
-        system_config.ligand,
+    ligand_mol = BSS.IO.readMolecules(str(system_config.ligand)).getMolecules[0]
+    ligand = parameterise_ligand_gaff2(
+        ligand_mol,
         net_charge=system_config.net_charge,
         work_dir=stage_dir,
     )
@@ -151,7 +152,11 @@ def _stage_solvate_membrane(config: RunConfig, system: Any, stage_dir: Path) -> 
         return system
 
     membrane = config.membrane or MembraneConfig()
-    logger.info("z_padding_nm=%.2f water_model=%s.", membrane.z_padding_nm, config.solvation.water_model)
+    logger.info(
+        "z_padding_nm=%.2f water_model=%s.",
+        membrane.z_padding_nm,
+        config.solvation.water_model,
+    )
     return solvate_membrane(
         system=system,
         params=config.solvation,

@@ -16,7 +16,6 @@ import numpy as np
 from MDAnalysis.analysis.leaflet import LeafletFinder
 
 from gbsa_pipeline.mmbsa import PBParams
-from gbsa_pipeline.parametrization import parametrize_ligand_only
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -32,7 +31,6 @@ __all__ = [
     "estimate_membrane_geometry",
     "extract_receptor_pdb",
     "merge_ligand_into_system",
-    "parametrize_ligand_only",
 ]
 
 

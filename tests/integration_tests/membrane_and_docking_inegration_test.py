@@ -20,8 +20,8 @@ from gbsa_pipeline.docking import (
 from gbsa_pipeline.membrane import (
     extract_receptor_pdb,
     merge_ligand_into_system,
-    parametrize_ligand_only,
 )
+from gbsa_pipeline.parametrization import parameterise_ligand_gaff2
 from gbsa_pipeline.solvation_box import SolvationParams, WaterModel, solvate_membrane
 
 TESTDATA = Path(__file__).parent.parent / "testdata" / "membrane" / "2rh1"
@@ -68,12 +68,16 @@ def test_membrane_docking_to_gbsa_prep_chain(tmp_path: Path) -> None:
     assert docked_sdf.exists()
 
     system = BSS.IO.readMolecules(
-        [str(TESTDATA / "system_unsolvated.gro"), str(TESTDATA / "system_unsolvated.top")],
-        make_whole=True,
+        [
+            str(TESTDATA / "system_unsolvated.gro"),
+            str(TESTDATA / "system_unsolvated.top"),
+        ],
+        make_waramethole=True,
     )
     n_atoms_before = system.nAtoms()
 
-    ligand = parametrize_ligand_only(docked_sdf, net_charge=0, work_dir=tmp_path)
+    ligand_mol = load_first_sdf_molecule(docked_sdf, remove_hs=False)
+    ligand = parameterise_ligand_gaff2(ligand_mol, net_charge=0, work_dir=tmp_path)
     merged = merge_ligand_into_system(system, ligand)
     assert merged.nAtoms() > n_atoms_before
 
