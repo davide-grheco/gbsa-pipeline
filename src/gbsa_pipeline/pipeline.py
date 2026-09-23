@@ -187,7 +187,11 @@ def _stage_minimize_cg(system: Any, stage_dir: Path) -> Any:
     return run_minimization(system, work_dir=stage_dir, params={"integrator": "cg"})
 
 
-def _stage_nvt_restrained(config: RunConfig, system: Any, stage_dir: Path) -> Any:
+def _stage_nvt_restrained(
+    config: RunConfig,
+    system: Any,
+    stage_dir: Path,
+) -> Any:
     """Water clash removal → short solvent relax → NVT heating 50→300 K with backbone restraints."""
     logger.info("  NVT heating over %.1f ps", config.equilibration.simulation_time_ps)
 
@@ -205,7 +209,14 @@ def _stage_nvt_restrained(config: RunConfig, system: Any, stage_dir: Path) -> An
     )
 
 
-def _stage_npt(config: RunConfig, system: Any, stage_dir: Path, *, restraint: str | None = None) -> Any:
+def _stage_npt(
+    config: RunConfig,
+    system: Any,
+    stage_dir: Path,
+    *,
+    restraint: str | None = None,
+    checkpoint_path: Path | None = None,
+) -> Any:
     """NPT equilibration, optionally with backbone restraints.
 
     Uses the same barostat as the [md] section so a memprot configured with
@@ -226,10 +237,17 @@ def _stage_npt(config: RunConfig, system: Any, stage_dir: Path, *, restraint: st
         work_dir=stage_dir,
         restraint=restraint,
         params=npt_barostat_overrides(config.md),
+        checkpoint_path=checkpoint_path,
     )
 
 
-def _stage_production(config: RunConfig, system: Any, stage_dir: Path) -> Any:
+def _stage_production(
+    config: RunConfig,
+    system: Any,
+    stage_dir: Path,
+    *,
+    checkpoint_path: Path | None = None,
+) -> Any:
     """Production MD."""
     sim_time = config.md.nsteps * config.md.dt * BSS.Units.Time.picosecond
     logger.info(
@@ -240,7 +258,7 @@ def _stage_production(config: RunConfig, system: Any, stage_dir: Path) -> Any:
         config.md.tcoupl,
         config.md.pcoupl,
     )
-    return run_production(sim_time, system, work_dir=stage_dir, params=config.md)
+    return run_production(sim_time, system, work_dir=stage_dir, params=config.md, checkpoint_path=checkpoint_path)
 
 
 # ---------------------------------------------------------------------------
@@ -329,21 +347,37 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
         "npt_restrained",
         "06_npt_res",
         output_dir,
-        lambda d: _stage_npt(config, system, d, restraint="backbone"),
+        lambda d: _stage_npt(
+            config,
+            system,
+            d,
+            restraint="backbone",
+            checkpoint_path=output_dir / "05_nvt_res" / "gromacs.cpt",
+        ),
     )
     system = _run_md_stage(
         "Stage 7/8: NPT Equilibration",
         "npt",
         "07_npt",
         output_dir,
-        lambda d: _stage_npt(config, system, d),
+        lambda d: _stage_npt(
+            config,
+            system,
+            d,
+            checkpoint_path=output_dir / "06_npt_res" / "gromacs.cpt",
+        ),
     )
     system = _run_md_stage(
         "Stage 8/8: Production MD",
         "production_md",
         "08_production",
         output_dir,
-        lambda d: _stage_production(config, system, d),
+        lambda d: _stage_production(
+            config,
+            system,
+            d,
+            checkpoint_path=output_dir / "07_npt" / "gromacs.cpt",
+        ),
     )
 
     logger.info("Pipeline complete. Output written to %s", output_dir)
