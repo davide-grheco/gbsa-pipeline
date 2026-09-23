@@ -7,8 +7,10 @@ import time
 from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 import BioSimSpace as BSS
+import MDAnalysis as mda
 
 from gbsa_pipeline.config import MembraneConfig
+from gbsa_pipeline.gromacs_index import write_index_from_ligand, write_index_from_system
 from gbsa_pipeline.md import (
     npt_barostat_overrides,
     remove_clashing_solvent_waters,
@@ -19,11 +21,14 @@ from gbsa_pipeline.md import (
     run_solvent_relaxation,
 )
 from gbsa_pipeline.md_io import save_bss_system_to_gromacs
+from gbsa_pipeline.membrane import estimate_membrane_geometry
+from gbsa_pipeline.mmbsa import MMPBSAConfig, run_gmx_mmpbsa_from_gromacs
 from gbsa_pipeline.parametrization import parameterise_ligand_gaff2, parametrize
 from gbsa_pipeline.solvation_box import solvate_membrane
 from gbsa_pipeline.solvation_bss import solvate_bss
 
 if TYPE_CHECKING:
+    import subprocess
     from pathlib import Path
 
     from gbsa_pipeline.config import RunConfig
@@ -261,6 +266,73 @@ def _stage_production(
     return run_production(sim_time, system, work_dir=stage_dir, params=config.md, checkpoint_path=checkpoint_path)
 
 
+def _stage_mmbsa(
+    config: RunConfig,
+    system: Any,
+    production_dir: Path,
+    stage_dir: Path,
+) -> subprocess.CompletedProcess[str]:
+    """Run gmx_MMPBSA on the production trajectory.
+
+    ``production_dir`` is Stage 8's own output directory: BSS.Process.Gromacs
+    writes its raw GROMACS files there as ``gromacs.tpr``/``gromacs.xtc``/
+    ``gromacs.top`` (same naming convention already relied on for
+    ``gromacs.cpt`` checkpoint continuity between stages) -- gmx_MMPBSA needs
+    these raw files, not the ``system.gro``/``.top`` snapshot that
+    ``_run_md_stage`` separately re-exports.
+
+    Receptor/ligand identification relies on GROMACS round-trips
+    (grompp/mdrun) never reordering or removing existing molecules -- only
+    ever appending new ones (e.g. solvation adding water/ions). For a
+    ``[system]`` run, ``parametrize()`` always places protein first and the
+    ligand second (index 0 / index 1) before solvation appends water/ions --
+    the same convention already relied on in
+    ``tests/integration_tests/modules_integration_test.py``, using
+    :func:`write_index_from_system` so water/ions are excluded from both
+    groups. For a ``[membrane]`` run the ligand is merged in *after* the
+    pre-built protein+lipid system (see ``_stage_parametrize_membrane``), so
+    its index equals however many molecules that pre-built system had --
+    computed here by re-reading it rather than assuming a fixed position --
+    and :func:`write_index_from_ligand` is used instead, so the lipids stay
+    in the Receptor group (required for a membrane PB calculation).
+    """
+    production_sire = system._sire_object
+    molecules = list(production_sire)
+
+    index_file = stage_dir / "index.ndx"
+
+    if config.system.membrane:
+        prebuilt = BSS.IO.readMolecules(
+            [str(config.system.gro_file), str(config.system.top_file)],
+            make_whole=True,
+        )
+        ligand_mol = molecules[prebuilt.nMolecules()]
+        write_index_from_ligand(production_sire, ligand_mol, index_file)
+
+        membrane_cfg = config.membrane or MembraneConfig()
+        universe = mda.Universe(str(production_dir / "system.gro"))
+        geometry = estimate_membrane_geometry(universe, lipid_resnames=sorted(membrane_cfg.lipid_resnames))
+        mmpbsa_config = MMPBSAConfig(gb=None, pb=geometry.pb_params())
+    else:
+        protein_mol = molecules[0]
+        ligand_mol = molecules[1]
+        write_index_from_system(production_sire, protein_mol, ligand_mol, index_file)
+        mmpbsa_config = MMPBSAConfig()
+
+    input_file = mmpbsa_config.write(stage_dir / "mmpbsa.in")
+
+    return run_gmx_mmpbsa_from_gromacs(
+        input_file=input_file,
+        complex_structure=production_dir / "gromacs.tpr",
+        trajectory=production_dir / "gromacs.xtc",
+        topology=production_dir / "gromacs.top",
+        index_file=index_file,
+        receptor_group=0,
+        ligand_group=1,
+        output_dir=stage_dir,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Pipeline entry point
 # ---------------------------------------------------------------------------
@@ -279,6 +351,7 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
     6. **NPT Restrained** — NPT equilibration with backbone restraints.
     7. **NPT** — NPT equilibration without restraints.
     8. **Production MD** — NpT simulation driven by ``[md]`` section params.
+    9. **GBSA** — gmx_MMPBSA on the production trajectory.
 
     Parameters
     ----------
@@ -293,7 +366,7 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
 
     if config.system.membrane:
         # Stage 1: Parametrize ligand + merge into pre-built membrane system
-        logger.info("─── Stage 1/8: Ligand parametrization + membrane merge ───")
+        logger.info("─── Stage 1/9: Ligand parametrization + membrane merge ───")
         param_dir = output_dir / "01_parametrize"
         param_dir.mkdir(parents=True, exist_ok=True)
         system = _run_stage(
@@ -302,7 +375,7 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
         )
 
         # Stage 2: Solvate (membrane-aware, or skip if already solvated)
-        logger.info("─── Stage 2/8: Membrane solvation ───")
+        logger.info("─── Stage 2/9: Membrane solvation ───")
         sol_dir = output_dir / "02_solvated"
         sol_dir.mkdir(parents=True, exist_ok=True)
         system = _run_stage(
@@ -311,39 +384,39 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
         )
     else:
         # Stage 1: Parametrize
-        logger.info("─── Stage 1/8: Parametrization ───")
+        logger.info("─── Stage 1/9: Parametrization ───")
         param_dir = output_dir / "01_parametrize"
         parametrized = _run_stage("parametrize", lambda: _stage_parametrize(config, param_dir))
         logger.info("  Done → %s, %s", parametrized.gro_file.name, parametrized.top_file.name)
 
         # Stage 2: Solvate
-        logger.info("─── Stage 2/8: Solvation ───")
+        logger.info("─── Stage 2/9: Solvation ───")
         sol_dir = output_dir / "02_solvated"
         system = _run_stage("solvation", lambda: _stage_solvate(config, parametrized, sol_dir))
 
     system = _run_md_stage(
-        "Stage 3/8: SD Minimization",
+        "Stage 3/9: SD Minimization",
         "sd_minimization",
         "03_sd",
         output_dir,
         lambda d: _stage_minimize_sd(config, system, d),
     )
     system = _run_md_stage(
-        "Stage 4/8: CG Minimization",
+        "Stage 4/9: CG Minimization",
         "cg_minimization",
         "04_cg",
         output_dir,
         lambda d: _stage_minimize_cg(system, d),
     )
     system = _run_md_stage(
-        "Stage 5/8: NVT Restrained Heating",
+        "Stage 5/9: NVT Restrained Heating",
         "nvt_restrained",
         "05_nvt_res",
         output_dir,
         lambda d: _stage_nvt_restrained(config, system, d),
     )
     system = _run_md_stage(
-        "Stage 6/8: NPT Restrained Equilibration",
+        "Stage 6/9: NPT Restrained Equilibration",
         "npt_restrained",
         "06_npt_res",
         output_dir,
@@ -356,7 +429,7 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
         ),
     )
     system = _run_md_stage(
-        "Stage 7/8: NPT Equilibration",
+        "Stage 7/9: NPT Equilibration",
         "npt",
         "07_npt",
         output_dir,
@@ -368,7 +441,7 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
         ),
     )
     system = _run_md_stage(
-        "Stage 8/8: Production MD",
+        "Stage 8/9: Production MD",
         "production_md",
         "08_production",
         output_dir,
@@ -378,6 +451,13 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
             d,
             checkpoint_path=output_dir / "07_npt" / "gromacs.cpt",
         ),
+    )
+    logger.info("─── Stage 9/9: GBSA (gmx_MMPBSA) ───")
+    mmbsa_dir = output_dir / "09_mmbsa"
+    mmbsa_dir.mkdir(parents=True, exist_ok=True)
+    _run_stage(
+        "mmbsa",
+        lambda: _stage_mmbsa(config, system, output_dir / "08_production", mmbsa_dir),
     )
 
     logger.info("Pipeline complete. Output written to %s", output_dir)

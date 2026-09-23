@@ -79,6 +79,51 @@ def write_index_from_system(
         _write_group(f, ligand_atoms)
 
 
+def write_index_from_ligand(
+    system: sire.system.System,
+    ligand: sire.mol.Molecule,
+    index_file: Path,
+) -> None:
+    """Write a GROMACS index file with Receptor and Ligand atom groups.
+
+    Unlike :func:`write_index_from_system`, ``Receptor`` here is not a single
+    named molecule but *everything in* ``system`` *that is not* ``ligand``.
+    For a membrane protein this correctly puts the lipids (and water/ions)
+    in the Receptor group alongside the protein: gmx_MMPBSA's membrane PB
+    calculation only keeps explicit lipids in a group's per-leg calculation
+    when they are intentionally included in the selected ``-cg`` receptor
+    group, so a receptor group containing only the bare protein would
+    silently strip the membrane context from that half of the decomposition.
+    Raises ``RuntimeError`` if ``ligand`` is not found in ``system``.
+    """
+    ligand_num = ligand.number()
+
+    receptor_atoms: list[int] = []
+    ligand_atoms: list[int] = []
+
+    atom_counter = 1  # GROMACS uses 1-based indexing
+
+    for mol in system:
+        natoms = len(mol.atoms())
+        start = atom_counter
+        end = atom_counter + natoms
+        if mol.number() == ligand_num:
+            ligand_atoms.extend(range(start, end))
+        else:
+            receptor_atoms.extend(range(start, end))
+        atom_counter = end
+
+    if not ligand_atoms:
+        raise RuntimeError("Ligand atoms not found in system.")
+
+    with index_file.open("w") as f:
+        f.write("[ Receptor ]\n")
+        _write_group(f, receptor_atoms)
+
+        f.write("\n[ Ligand ]\n")
+        _write_group(f, ligand_atoms)
+
+
 def _write_group(f: TextIOWrapper, atoms: Sequence[int], per_line: int = 15) -> None:
     """Write a single index group body, 15 atom indices per line."""
     for i in range(0, len(atoms), per_line):
