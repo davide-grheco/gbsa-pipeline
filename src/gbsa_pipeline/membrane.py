@@ -73,12 +73,31 @@ class MembraneGeometry:
     n_phosphates: int
 
     def pb_params(self, **overrides: Any) -> PBParams:
-        """Build membrane-ready PBParams from this geometry."""
+        """Build membrane-ready PBParams from this geometry.
+
+        ``ipb``/``bcopt``/``nfocus``/``solvopt``/``fillratio`` are set to the
+        only combination confirmed to run without crashing sander's PB solver
+        for a membrane system (see
+        :meth:`PBParams._validate_membrane_settings`). ``maxsph``/
+        ``maxarcdot`` are raised well above their class defaults (400/1500):
+        the surface-area term's default limits are too small for a real
+        protein and get silently exceeded ("SA Bomb in circle(): Stored
+        surface points over limit").
+        """
         kwargs: dict[str, Any] = {
             "memopt": 1,
             "mctrdz": self.mctrdz,
             "mthick": self.mthick,
             "eneopt": 1,
+            "ipb": 1,
+            "bcopt": 10,
+            "nfocus": 1,
+            "solvopt": 2,
+            "fillratio": 1.25,
+            "cutnb": 99.0,
+            "cutfd": 7.0,
+            "maxsph": 8000,
+            "maxarcdot": 15000,
         }
         kwargs.update(overrides)
 

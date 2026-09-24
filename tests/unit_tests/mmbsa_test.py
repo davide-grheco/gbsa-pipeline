@@ -146,7 +146,10 @@ def test_pb_only_membrane_config_is_accepted() -> None:
     This is the supported path for membrane-protein MM/PBSA runs: PB only,
     with the implicit membrane enabled.
     """
-    config = MMPBSAConfig(gb=None, pb=PBParams(memopt=1, eneopt=1))
+    config = MMPBSAConfig(
+        gb=None,
+        pb=PBParams(memopt=1, eneopt=1, ipb=1, bcopt=10, nfocus=1, fillratio=1.25),
+    )
     text = config.to_text()
 
     assert "&gb" not in text
