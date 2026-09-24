@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import MDAnalysis as mda
 import numpy as np
-from MDAnalysis.analysis.leaflet import LeafletFinder
+from MDAnalysis.analysis.leaflet import LeafletFinder, optimize_cutoff
 
 from gbsa_pipeline.mmbsa import PBParams
 
@@ -86,7 +86,7 @@ class MembraneGeometry:
 def estimate_membrane_geometry(
     universe: mda.Universe,
     lipid_resnames: Sequence[str] = tuple(DEFAULT_LIPID_RESNAMES),
-    cutoff: float = 15.0,
+    cutoff: float | None = None,
 ) -> MembraneGeometry:
     """Measure bilayer parameters from lipid phosphate atoms.
 
@@ -103,13 +103,23 @@ def estimate_membrane_geometry(
     separated along z.
     """
     resnames = " ".join(sorted(set(lipid_resnames)))
-    phosphates = universe.select_atoms(f"resname {resnames} and name P*")
+    selection = f"resname {resnames} and name P*"
+    phosphates = universe.select_atoms(selection)
 
     if len(phosphates) == 0:
         raise ValueError(
             f"No phosphate atoms belonging to {sorted(set(lipid_resnames))} were found. "
             "Check the lipid residue names and pass lipid_resnames explicitly."
         )
+    if cutoff is None:
+        try:
+            cutoff, _ = optimize_cutoff(universe, selection, dmin=10.0, dmax=30.0, step=0.5)
+        except Exception as exc:
+            raise ValueError(
+                "Could not auto-detect a LeafletFinder cutoff that splits "
+                f"{sorted(set(lipid_resnames))} phosphates into two balanced leaflets "
+                "between 10-30 Angstrom. Pass an explicit cutoff."
+            ) from exc
 
     finder = LeafletFinder(universe, phosphates, cutoff=cutoff)
     groups = finder.groups()
@@ -123,6 +133,23 @@ def estimate_membrane_geometry(
 
     upper, lower = groups
     separation = upper.centroid() - lower.centroid()
+
+    # A bilayer whose true center sits at/near the periodic boundary has its two
+    # leaflets near OPPOSITE box edges in unwrapped coordinates (e.g. one leaflet
+    # near z=15, the other near z=box_z-15). The naive z-separation between them
+    # then approaches the full box height instead of the true membrane
+    # thickness -- confirmed on this project's own 2rh1/POPC testdata, where it
+    # reported mthick=124 (box_z=161) instead of the true ~36.7. Wrapping the
+    # z-component into (-box_z/2, box_z/2] recovers the true, shorter
+    # periodic-image separation regardless of where the bilayer sits relative
+    # to the box edges; it is a no-op when the bilayer does not straddle the
+    # boundary (separation already within that range). Universes without box
+    # information (e.g. a synthetic/merged system in a unit test) have no
+    # periodic image to wrap against, so the raw separation is used as-is.
+    box_z = float(universe.dimensions[_Z_AXIS]) if universe.dimensions is not None else None
+    if box_z is not None:
+        separation[_Z_AXIS] -= box_z * round(separation[_Z_AXIS] / box_z)
+
     lateral = float(np.linalg.norm(separation[:_Z_AXIS]))
     normal_component = abs(float(separation[_Z_AXIS]))
 
@@ -130,9 +157,12 @@ def estimate_membrane_geometry(
         raise ValueError("Rotate model so lipid layer along z axis")
 
     mthick = normal_component
+    mctrdz = float(lower.centroid()[_Z_AXIS] + separation[_Z_AXIS] / 2)
+    if box_z is not None:
+        mctrdz %= box_z
 
     return MembraneGeometry(
-        mctrdz=float(phosphates.positions[:, _Z_AXIS].mean()),
+        mctrdz=mctrdz,
         mthick=mthick,
         n_phosphates=len(phosphates),
     )
