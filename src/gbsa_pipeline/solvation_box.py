@@ -146,6 +146,29 @@ class SolvationParams(BaseModel):
         return self
 
 
+def _base_solvent_kwargs(
+    system: Any,
+    params: SolvationParams,
+    work_dir: Path | str | None,
+) -> dict[str, Any]:
+    """Build the BSS ``solvent()`` kwargs shared by run_solvation and solvate_membrane.
+
+    Both callers add their own box-related kwargs (``shell``/``box``/``angles``
+    for an isotropic box, or nothing -- the box is set directly on the system
+    -- for a membrane) on top of this common base before calling the solvent
+    function.
+    """
+    kwargs: dict[str, Any] = {
+        "molecule": system,
+        "is_neutral": params.neutralize,
+    }
+    if params.ion_concentration is not None:
+        kwargs["ion_conc"] = params.ion_concentration
+    if work_dir is not None:
+        kwargs["work_dir"] = str(work_dir)
+    return kwargs
+
+
 def run_solvation(
     system: Any,
     params: SolvationParams,
@@ -163,11 +186,7 @@ def run_solvation(
     import BioSimSpace as BSS  # noqa: PLC0415
 
     solvent = _get_bss_solvent_function(BSS, params.water_model)
-
-    kwargs: dict[str, Any] = {
-        "molecule": system,
-        "is_neutral": params.neutralize,
-    }
+    kwargs = _base_solvent_kwargs(system, params, work_dir)
 
     if params.padding is not None:
         kwargs["shell"] = params.padding * BSS.Units.Length.nanometer
@@ -178,12 +197,6 @@ def run_solvation(
         box, angles = _make_bss_box(BSS, params.shape, params.box_size)
         kwargs["box"] = box
         kwargs["angles"] = angles
-
-    if params.ion_concentration is not None:
-        kwargs["ion_conc"] = params.ion_concentration
-
-    if work_dir is not None:
-        kwargs["work_dir"] = str(work_dir)
 
     return solvent(**kwargs)
 
@@ -282,15 +295,7 @@ def solvate_membrane(
     system.setBox(new_box, angles=[90 * BSS.Units.Angle.degree] * 3)
 
     solvent = _get_bss_solvent_function(BSS, params.water_model)
-    kwargs: dict[str, Any] = {
-        "molecule": system,
-        "is_neutral": params.neutralize,
-    }
-
-    if params.ion_concentration is not None:
-        kwargs["ion_conc"] = params.ion_concentration
-    if work_dir is not None:
-        kwargs["work_dir"] = str(work_dir)
+    kwargs = _base_solvent_kwargs(system, params, work_dir)
 
     solvated = solvent(**kwargs)
     return _strip_water_inside_membrane(solvated, lipid_resnames, work_dir)
