@@ -27,6 +27,7 @@ __all__ = [
     "DEFAULT_LIPID_RESNAMES",
     "MembraneGeometry",
     "estimate_membrane_geometry",
+    "extract_protein_ligand_system",
     "extract_receptor_pdb",
     "lipid_headgroup_restraint_atoms",
 ]
@@ -216,6 +217,37 @@ def lipid_headgroup_restraint_atoms(
         )
 
     return indices
+
+
+def extract_protein_ligand_system(
+    system: Any,
+    n_solute_molecules: int,
+    n_protein_molecules: int,
+) -> Any:
+    """Strip lipids, water, and ions from a production membrane system, keeping only protein + ligand.
+
+    A full bilayer patch (hundreds of lipids) makes the gmx_MMPBSA "complex"
+    large enough to overflow AmberTools 24's 32-bit sander PB solver. Membrane
+    geometry (``mctrdz``/``mthick``) is computed separately, from the original
+    unstripped structure via :func:`estimate_membrane_geometry`, so reducing
+    the complex here loses no membrane context -- this mirrors the official
+    gmx_MMPBSA ``Protein_membrane`` example, whose Receptor is likewise
+    protein-only despite a much larger full solvated structure.
+
+    ``n_solute_molecules`` is the pre-built ``[membrane]`` system's molecule
+    count (protein + lipids, before the ligand was merged in);
+    ``n_protein_molecules`` is how many of those are protein. Molecules are
+    identified by position, not name or number, matching the convention used
+    throughout ``_stage_mmbsa``.
+
+    Returns a new ``BSS._SireWrappers.System``; ``system`` itself is left
+    untouched (``removeMolecules`` mutates in place, so this works on a copy).
+    """
+    reduced = system.copy()
+    molecules = list(reduced.getMolecules())
+    to_remove = molecules[n_protein_molecules:n_solute_molecules] + molecules[n_solute_molecules + 1 :]
+    reduced.removeMolecules(to_remove)
+    return reduced
 
 
 def extract_receptor_pdb(

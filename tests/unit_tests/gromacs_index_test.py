@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from gbsa_pipeline.gromacs_index import write_index_from_ligand, write_index_from_system
+from gbsa_pipeline.gromacs_index import write_index_from_system
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -121,65 +121,3 @@ def test_ligand_not_in_system(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="Ligand"):
         write_index_from_system(system, protein, ligand, tmp_path / "test.ndx")
-
-
-# ---------------------------------------------------------------------------
-# write_index_from_ligand -- membrane systems: Receptor = everything but ligand
-# ---------------------------------------------------------------------------
-
-
-def test_membrane_system_lipids_land_in_receptor(tmp_path: Path) -> None:
-    """Protein + multiple lipids + ligand -- lipids must join Receptor, not be dropped.
-
-    gmx_MMPBSA's membrane PB model only keeps the emem (lipid) dielectric
-    for atoms that are actually in the receptor group -- if lipids were
-    silently excluded here, the membrane dielectric would be lost for the
-    receptor-only leg of the calculation.
-    """
-    protein = _FakeMol(3, number=1)
-    lipid1 = _FakeMol(2, number=2)
-    lipid2 = _FakeMol(2, number=3)
-    ligand = _FakeMol(2, number=4)
-    system = _FakeSystem([protein, lipid1, lipid2, ligand])
-
-    out = tmp_path / "test.ndx"
-    write_index_from_ligand(system, ligand, out)
-
-    content = _read_index(out)
-    assert "[ Receptor ]" in content
-    assert "[ Ligand ]" in content
-    # Receptor = protein (1-3) + lipid1 (4-5) + lipid2 (6-7), all one group
-    assert "1 2 3 4 5 6 7" in content
-    # Ligand = last 2 atoms (8-9)
-    assert "8 9" in content
-
-
-def test_membrane_system_water_and_ions_also_land_in_receptor(tmp_path: Path) -> None:
-    """Water/ions placed after the ligand still join Receptor (everything-but-ligand)."""
-    protein = _FakeMol(3, number=1)
-    lipid = _FakeMol(2, number=2)
-    ligand = _FakeMol(2, number=3)
-    water = _FakeMol(3, number=4)
-    ion = _FakeMol(1, number=5)
-    system = _FakeSystem([protein, lipid, ligand, water, ion])
-
-    out = tmp_path / "test.ndx"
-    write_index_from_ligand(system, ligand, out)
-
-    content = _read_index(out)
-    # Receptor = protein+lipid (1-5) and water+ion (8-11); ligand (6-7) excluded
-    assert "1 2 3 4 5" in content
-    assert "8 9 10 11" in content
-    # Ligand group is the two atoms in between
-    assert "6 7" in content
-
-
-def test_write_index_from_ligand_raises_when_ligand_missing(tmp_path: Path) -> None:
-    """Ligand absent from system raises RuntimeError."""
-    protein = _FakeMol(3, number=1)
-    lipid = _FakeMol(2, number=2)
-    ligand = _FakeMol(2, number=99)  # not in system
-    system = _FakeSystem([protein, lipid])
-
-    with pytest.raises(RuntimeError, match="Ligand"):
-        write_index_from_ligand(system, ligand, tmp_path / "test.ndx")

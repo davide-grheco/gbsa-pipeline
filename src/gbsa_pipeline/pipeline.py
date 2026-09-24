@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import time
 from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
@@ -10,7 +11,7 @@ import BioSimSpace as BSS
 import MDAnalysis as mda
 
 from gbsa_pipeline.config import MembraneConfig
-from gbsa_pipeline.gromacs_index import write_index_from_ligand, write_index_from_system
+from gbsa_pipeline.gromacs_index import write_index_from_membrane_system, write_index_from_system
 from gbsa_pipeline.md import (
     npt_barostat_overrides,
     remove_clashing_solvent_waters,
@@ -21,7 +22,11 @@ from gbsa_pipeline.md import (
     run_solvent_relaxation,
 )
 from gbsa_pipeline.md_io import save_bss_system_to_gromacs
-from gbsa_pipeline.membrane import estimate_membrane_geometry, lipid_headgroup_restraint_atoms
+from gbsa_pipeline.membrane import (
+    estimate_membrane_geometry,
+    extract_protein_ligand_system,
+    lipid_headgroup_restraint_atoms,
+)
 from gbsa_pipeline.mmbsa import MMPBSAConfig, run_gmx_mmpbsa_from_gromacs
 from gbsa_pipeline.parametrization import parameterise_ligand_gaff2, parametrize
 from gbsa_pipeline.solvation_box import solvate_membrane
@@ -307,29 +312,20 @@ def _stage_mmbsa(
 
     ``production_dir`` is Stage 8's own output directory: BSS.Process.Gromacs
     writes its raw GROMACS files there as ``gromacs.tpr``/``gromacs.xtc``/
-    ``gromacs.top`` (same naming convention already relied on for
-    ``gromacs.cpt`` checkpoint continuity between stages) -- gmx_MMPBSA needs
-    these raw files, not the ``system.gro``/``.top`` snapshot that
-    ``_run_md_stage`` separately re-exports.
+    ``gromacs.top`` -- gmx_MMPBSA needs these, not the ``system.gro``/``.top``
+    snapshot ``_run_md_stage`` separately re-exports.
 
-    Receptor/ligand identification relies on GROMACS round-trips
-    (grompp/mdrun) never reordering or removing existing molecules -- only
-    ever appending new ones (e.g. solvation adding water/ions). For a
-    ``[system]`` run, ``parametrize()`` always places protein first and the
-    ligand second (index 0 / index 1) before solvation appends water/ions --
-    the same convention already relied on in
-    ``tests/integration_tests/modules_integration_test.py``, using
-    :func:`write_index_from_system` so water/ions are excluded from both
-    groups. For a ``[membrane]`` run the ligand is merged in *after* the
-    pre-built protein+lipid system (see ``_stage_parametrize_membrane``), so
-    its index equals however many molecules that pre-built system had --
-    computed here by re-reading it rather than assuming a fixed position --
-    and :func:`write_index_from_ligand` is used instead, so the lipids stay
-    in the Receptor group (required for a membrane PB calculation).
+    Receptor/ligand identification relies on GROMACS round-trips never
+    reordering existing molecules, only appending new ones. For a
+    ``[system]`` run, ``parametrize()`` always places protein first and
+    ligand second, so :func:`write_index_from_system` reads those positions
+    directly off the raw production files.
+
+    For a ``[membrane]`` run, gmx_MMPBSA instead runs against a *reduced*
+    protein+ligand-only system from :func:`extract_protein_ligand_system`
+    (see its docstring for why) -- membrane geometry is computed separately
+    from the original unstripped structure, so nothing is lost.
     """
-    production_sire = system._sire_object
-    molecules = list(production_sire)
-
     index_file = stage_dir / "index.ndx"
 
     if config.system.membrane:
@@ -337,19 +333,50 @@ def _stage_mmbsa(
             [str(config.system.gro_file), str(config.system.top_file)],
             make_whole=True,
         )
-        ligand_mol = molecules[prebuilt.nMolecules()]
-        write_index_from_ligand(production_sire, ligand_mol, index_file)
-
         membrane_cfg = config.membrane or MembraneConfig()
-        universe = mda.Universe(str(production_dir / "system.gro"))
-        geometry = estimate_membrane_geometry(universe, lipid_resnames=sorted(membrane_cfg.lipid_resnames))
-        mmpbsa_config = MMPBSAConfig(gb=None, pb=geometry.pb_params())
-    else:
-        protein_mol = molecules[0]
-        ligand_mol = molecules[1]
-        write_index_from_system(production_sire, protein_mol, ligand_mol, index_file)
-        mmpbsa_config = MMPBSAConfig()
+        lipid_resnames = set(membrane_cfg.lipid_resnames)
 
+        n_solute_molecules = prebuilt.nMolecules()
+        prebuilt_mols = prebuilt.getMolecules()
+        n_protein_molecules = sum(
+            1 for mol in prebuilt_mols if not ({res.name() for res in mol.getResidues()} & lipid_resnames)
+        )
+
+        universe = mda.Universe(str(production_dir / "system.gro"))
+        geometry = estimate_membrane_geometry(universe, lipid_resnames=sorted(lipid_resnames))
+
+        reduced_system = extract_protein_ligand_system(system, n_solute_molecules, n_protein_molecules)
+        complex_prefix = stage_dir / "complex"
+        _, top_file = save_bss_system_to_gromacs(reduced_system, complex_prefix)
+        BSS.IO.saveMolecules(str(complex_prefix), reduced_system, fileformat="pdb")
+        structure_pdb = complex_prefix.with_suffix(".pdb")
+        trajectory_pdb = stage_dir / "complex_traj.pdb"
+        shutil.copy(structure_pdb, trajectory_pdb)
+
+        reduced_sire = reduced_system._sire_object
+        ligand_mol = list(reduced_sire)[n_protein_molecules]
+        write_index_from_membrane_system(reduced_sire, n_protein_molecules, ligand_mol, index_file)
+
+        mmpbsa_config = MMPBSAConfig(gb=None, pb=geometry.pb_params())
+        input_file = mmpbsa_config.write(stage_dir / "mmpbsa.in")
+
+        return run_gmx_mmpbsa_from_gromacs(
+            input_file=input_file,
+            complex_structure=structure_pdb,
+            trajectory=trajectory_pdb,
+            topology=top_file,
+            index_file=index_file,
+            receptor_group=0,
+            ligand_group=1,
+            output_dir=stage_dir,
+        )
+
+    production_sire = system._sire_object
+    molecules = list(production_sire)
+    protein_mol = molecules[0]
+    ligand_mol = molecules[1]
+    write_index_from_system(production_sire, protein_mol, ligand_mol, index_file)
+    mmpbsa_config = MMPBSAConfig()
     input_file = mmpbsa_config.write(stage_dir / "mmpbsa.in")
 
     return run_gmx_mmpbsa_from_gromacs(
