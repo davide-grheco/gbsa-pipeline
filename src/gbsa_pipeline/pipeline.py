@@ -166,6 +166,7 @@ def _stage_solvate_membrane(config: RunConfig, system: Any, stage_dir: Path) -> 
         system=system,
         params=config.solvation,
         z_padding_nm=membrane.z_padding_nm,
+        lipid_resnames=sorted(membrane.lipid_resnames),
         work_dir=stage_dir,
     )
 
@@ -263,7 +264,13 @@ def _stage_production(
         config.md.tcoupl,
         config.md.pcoupl,
     )
-    return run_production(sim_time, system, work_dir=stage_dir, params=config.md, checkpoint_path=checkpoint_path)
+    return run_production(
+        sim_time,
+        system,
+        work_dir=stage_dir,
+        params=config.md,
+        checkpoint_path=checkpoint_path,
+    )
 
 
 def _stage_mmbsa(
