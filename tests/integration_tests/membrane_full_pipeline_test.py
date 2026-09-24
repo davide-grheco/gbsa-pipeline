@@ -46,7 +46,7 @@ def test_run_pipeline_membrane_end_to_end(tmp_path: Path) -> None:
             solvate=True,
         ),
         membrane=MembraneConfig(z_padding_nm=1.5),
-        minimization=MinimizationConfig(nsteps=500),
+        minimization=MinimizationConfig(nsteps=10000),
         equilibration=EquilibrationConfig(simulation_time_ps=2.0),
         npt_equilibration=NptConfig(simulation_time_ps=2.0),
         md=GromacsParams(nsteps=100, dt=0.001),

@@ -182,6 +182,7 @@ def _stage_minimize_sd(config: RunConfig, system: Any, stage_dir: Path) -> Any:
         system,
         work_dir=stage_dir,
         params={
+            "integrator": "steep",
             "nsteps": config.minimization.nsteps,
             "emtol": config.minimization.emtol,
         },
