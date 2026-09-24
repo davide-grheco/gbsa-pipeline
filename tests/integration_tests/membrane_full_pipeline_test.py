@@ -43,7 +43,6 @@ def test_run_pipeline_membrane_end_to_end(tmp_path: Path) -> None:
             ligand=TESTDATA / "ligand.sdf",
             net_charge=0,
             membrane=True,
-            solvate=True,
         ),
         membrane=MembraneConfig(z_padding_nm=1.5),
         minimization=MinimizationConfig(nsteps=10000),

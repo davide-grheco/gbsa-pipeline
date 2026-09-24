@@ -33,7 +33,6 @@ class SystemConfig(BaseModel):
     top_file: Path | None = None
     ligand: Path | None = None
     net_charge: int | None = None
-    solvate: bool = True
     membrane: bool = False
 
     @model_validator(mode="after")
@@ -67,6 +66,7 @@ class MembraneConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    solvate: bool = True
     lipid_resnames: frozenset[str] = frozenset(DEFAULT_LIPID_RESNAMES)
     z_padding_nm: float = Field(default=1.5, ge=0.0)  # only used when system.solvate is True
 

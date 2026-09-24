@@ -11,7 +11,10 @@ import BioSimSpace as BSS
 import MDAnalysis as mda
 
 from gbsa_pipeline.config import MembraneConfig
-from gbsa_pipeline.gromacs_index import write_index_from_membrane_system, write_index_from_system
+from gbsa_pipeline.gromacs_index import (
+    write_index_from_membrane_system,
+    write_index_from_system,
+)
 from gbsa_pipeline.md import (
     npt_barostat_overrides,
     remove_clashing_solvent_waters,
@@ -158,7 +161,8 @@ def _stage_parametrize_membrane(config: RunConfig, stage_dir: Path) -> Any:
 
 def _stage_solvate_membrane(config: RunConfig, system: Any, stage_dir: Path) -> Any:
     """Solvate a membrane system, or pass it through unchanged if already solvated."""
-    if not config.system.solvate:
+    membrane = config.membrane or MembraneConfig()
+    if not membrane.solvate:
         logger.info("solvate=False - system is already solvated, skipping.")
         return system
 

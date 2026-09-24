@@ -316,7 +316,6 @@ def test_system_config_membrane_defaults(tmp_path: Path) -> None:
     cfg = SystemConfig(gro_file=gro, top_file=top, ligand=ligand, membrane=True)
 
     assert cfg.protein is None
-    assert cfg.solvate is True
     assert cfg.membrane is True
 
 
