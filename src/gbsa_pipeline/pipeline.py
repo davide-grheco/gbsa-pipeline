@@ -21,7 +21,7 @@ from gbsa_pipeline.md import (
     run_solvent_relaxation,
 )
 from gbsa_pipeline.md_io import save_bss_system_to_gromacs
-from gbsa_pipeline.membrane import estimate_membrane_geometry
+from gbsa_pipeline.membrane import estimate_membrane_geometry, lipid_headgroup_restraint_atoms
 from gbsa_pipeline.mmbsa import MMPBSAConfig, run_gmx_mmpbsa_from_gromacs
 from gbsa_pipeline.parametrization import parameterise_ligand_gaff2, parametrize
 from gbsa_pipeline.solvation_box import solvate_membrane
@@ -29,6 +29,7 @@ from gbsa_pipeline.solvation_bss import solvate_bss
 
 if TYPE_CHECKING:
     import subprocess
+    from collections.abc import Sequence
     from pathlib import Path
 
     from gbsa_pipeline.config import RunConfig
@@ -194,12 +195,34 @@ def _stage_minimize_cg(system: Any, stage_dir: Path) -> Any:
     return run_minimization(system, work_dir=stage_dir, params={"integrator": "cg"})
 
 
+def _restraint_selection(config: RunConfig, system: Any) -> str | list[int]:
+    """Backbone-only restraint for soluble systems; backbone + lipid headgroups for membranes.
+
+    BSS's "backbone" keyword has no concept of a membrane, so a membrane run
+    that only restrains the protein backbone lets lipid headgroups drift or
+    flip-flop during early NVT/NPT equilibration (CHARMM-GUI's standard
+    protocol restrains both together for exactly this reason). Combining them
+    requires an explicit atom-index list -- BSS accepts a restraint keyword or
+    an index list, not both -- so "backbone" is resolved to indices first via
+    ``system.getRestraintAtoms`` and unioned with the lipid phosphate indices.
+    """
+    if not config.system.membrane:
+        return "backbone"
+
+    membrane = config.membrane or MembraneConfig()
+    backbone = system.getRestraintAtoms("backbone")
+    lipids = lipid_headgroup_restraint_atoms(system, sorted(membrane.lipid_resnames))
+    return sorted(set(backbone) | set(lipids))
+
+
 def _stage_nvt_restrained(
     config: RunConfig,
     system: Any,
     stage_dir: Path,
+    *,
+    restraint: str | Sequence[int] = "backbone",
 ) -> Any:
-    """Water clash removal → short solvent relax → NVT heating 50→300 K with backbone restraints."""
+    """Water clash removal → short solvent relax → NVT heating 50→300 K with restraints."""
     logger.info("  NVT heating over %.1f ps", config.equilibration.simulation_time_ps)
 
     system = remove_clashing_solvent_waters(system, work_dir=stage_dir / "water_cleanup")
@@ -212,7 +235,7 @@ def _stage_nvt_restrained(
         work_dir=stage_dir,
         temperature_start=50 * BSS.Units.Temperature.kelvin,
         temperature_end=300 * BSS.Units.Temperature.kelvin,
-        restraint="backbone",
+        restraint=restraint,
     )
 
 
@@ -221,7 +244,7 @@ def _stage_npt(
     system: Any,
     stage_dir: Path,
     *,
-    restraint: str | None = None,
+    restraint: str | Sequence[int] | None = None,
     checkpoint_path: Path | None = None,
 ) -> Any:
     """NPT equilibration, optionally with backbone restraints.
@@ -416,12 +439,13 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
         output_dir,
         lambda d: _stage_minimize_cg(system, d),
     )
+    restraint = _restraint_selection(config, system)
     system = _run_md_stage(
         "Stage 5/9: NVT Restrained Heating",
         "nvt_restrained",
         "05_nvt_res",
         output_dir,
-        lambda d: _stage_nvt_restrained(config, system, d),
+        lambda d: _stage_nvt_restrained(config, system, d, restraint=restraint),
     )
     system = _run_md_stage(
         "Stage 6/9: NPT Restrained Equilibration",
@@ -432,7 +456,7 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
             config,
             system,
             d,
-            restraint="backbone",
+            restraint=restraint,
             checkpoint_path=output_dir / "05_nvt_res" / "gromacs.cpt",
         ),
     )

@@ -28,6 +28,7 @@ __all__ = [
     "MembraneGeometry",
     "estimate_membrane_geometry",
     "extract_receptor_pdb",
+    "lipid_headgroup_restraint_atoms",
 ]
 
 
@@ -166,6 +167,55 @@ def estimate_membrane_geometry(
         mthick=mthick,
         n_phosphates=len(phosphates),
     )
+
+
+def lipid_headgroup_restraint_atoms(
+    system: Any,
+    lipid_resnames: Sequence[str],
+) -> list[int]:
+    """Absolute atom indices of lipid phosphate atoms, for use as a BSS restraint list.
+
+    BSS's builtin "backbone"/"heavy"/"all" restraint keywords have no concept
+    of a membrane -- "heavy" would restrain every non-hydrogen lipid tail atom
+    too, freezing the whole bilayer instead of letting it relax around a fixed
+    protein and headgroups. Restraining only phosphate atoms (the same "P*"
+    name-prefix convention used by :func:`estimate_membrane_geometry`) mirrors
+    CHARMM-GUI's standard equilibration protocol, which restrains lipid
+    headgroups -- not the full lipid -- alongside the protein backbone during
+    early NVT/NPT equilibration, then releases them before production.
+
+    BSS accepts a restraint keyword *or* an explicit atom-index list for
+    ``BSS.Protocol.Equilibration``, not both at once. To restrain protein
+    backbone and lipid headgroups together, resolve "backbone" via
+    ``system.getRestraintAtoms("backbone")`` first and pass the union of that
+    with this function's result as the explicit list.
+
+    ``system`` is a ``BSS._SireWrappers.System``. Atom indices are counted by
+    accumulating each molecule's atom count in system order, matching the
+    "absolute index" convention ``getRestraintAtoms`` itself returns.
+    """
+    resnames = set(lipid_resnames)
+    indices: list[int] = []
+    atom_offset = 0
+    for mol in system.getMolecules():
+        residues = mol.getResidues()
+        if {res.name() for res in residues} & resnames:
+            indices.extend(
+                atom_offset + atom.index()
+                for res in residues
+                if res.name() in resnames
+                for atom in res.getAtoms()
+                if atom.name().startswith("P")
+            )
+        atom_offset += mol.nAtoms()
+
+    if not indices:
+        raise ValueError(
+            f"No lipid phosphate atoms belonging to {sorted(resnames)} were found for "
+            "restraints. Check the lipid residue names."
+        )
+
+    return indices
 
 
 def extract_receptor_pdb(
