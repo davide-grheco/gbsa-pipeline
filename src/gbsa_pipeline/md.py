@@ -68,7 +68,7 @@ from gbsa_pipeline.md_diagnostics import analyze_crash_frames, check_posre_consi
 from gbsa_pipeline.mdp import GromacsParams, field_to_mdp_key, set_mdp_key
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     import sire
 
@@ -627,7 +627,7 @@ def run_heating(
     params: GromacsParams | Mapping[str, Any] | None = None,
     temperature_start: BSS.Types.Temperature = 50 * BSS.Units.Temperature.kelvin,
     temperature_end: BSS.Types.Temperature = 300 * BSS.Units.Temperature.kelvin,
-    restraint: str | None = "backbone",
+    restraint: str | Sequence[int] | None = "backbone",
     *,
     ignore_warnings: bool = True,
     max_time: int | None = None,
@@ -689,7 +689,7 @@ def run_npt_equilibration(
     heated: sire.System,
     work_dir: Path | None = None,
     params: GromacsParams | Mapping[str, Any] | None = None,
-    restraint: str | None = "backbone",
+    restraint: str | Sequence[int] | None = "backbone",
     *,
     ignore_warnings: bool = True,
     max_time: int | None = None,

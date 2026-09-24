@@ -79,6 +79,58 @@ def write_index_from_system(
         _write_group(f, ligand_atoms)
 
 
+def write_index_from_membrane_system(
+    system: sire.system.System,
+    n_solute_molecules: int,
+    ligand: sire.mol.Molecule,
+    index_file: Path,
+) -> None:
+    """Write a GROMACS index file with Receptor and Ligand atom groups for a membrane run.
+
+    Receptor = every molecule before the ligand (protein + lipids); Ligand =
+    the molecule at position ``n_solute_molecules``; water/ions (appended
+    later by solvation) are excluded from both. Molecules are identified by
+    position, not number, since GROMACS round-trips only ever append new
+    molecules, never reorder existing ones.
+
+    Lipids must stay in Receptor: gmx_MMPBSA's own topology cleaning
+    (``GMXMMPBSA.make_top.cleantop``) strips only water/ions from the ``-cp``
+    topology, never lipids, then requires the Receptor+Ligand selection to
+    cover that cleaned topology exactly. A protein-only Receptor undershoots
+    it; one that also keeps water overshoots it.
+    Raises ``RuntimeError`` if no protein/lipid or ligand atoms are found.
+    """
+    ligand_num = ligand.number()
+
+    receptor_atoms: list[int] = []
+    ligand_atoms: list[int] = []
+
+    atom_counter = 1  # GROMACS uses 1-based indexing
+
+    for position, mol in enumerate(system):
+        natoms = len(mol.atoms())
+        start = atom_counter
+        end = atom_counter + natoms
+        if mol.number() == ligand_num:
+            ligand_atoms.extend(range(start, end))
+        elif position < n_solute_molecules:
+            receptor_atoms.extend(range(start, end))
+        atom_counter = end
+
+    if not receptor_atoms:
+        raise RuntimeError("Protein/lipid atoms not found in system.")
+
+    if not ligand_atoms:
+        raise RuntimeError("Ligand atoms not found in system.")
+
+    with index_file.open("w") as f:
+        f.write("[ Receptor ]\n")
+        _write_group(f, receptor_atoms)
+
+        f.write("\n[ Ligand ]\n")
+        _write_group(f, ligand_atoms)
+
+
 def _write_group(f: TextIOWrapper, atoms: Sequence[int], per_line: int = 15) -> None:
     """Write a single index group body, 15 atom indices per line."""
     for i in range(0, len(atoms), per_line):

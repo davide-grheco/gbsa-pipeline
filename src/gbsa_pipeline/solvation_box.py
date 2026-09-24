@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import re
+import tempfile
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
 import BioSimSpace as BSS
+import MDAnalysis as mda
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from gbsa_pipeline.md_io import save_bss_system_to_gromacs
+
 if TYPE_CHECKING:
-    from pathlib import Path
+    from collections.abc import Sequence
 
 
 @dataclass(frozen=True)
@@ -140,6 +146,29 @@ class SolvationParams(BaseModel):
         return self
 
 
+def _base_solvent_kwargs(
+    system: Any,
+    params: SolvationParams,
+    work_dir: Path | str | None,
+) -> dict[str, Any]:
+    """Build the BSS ``solvent()`` kwargs shared by run_solvation and solvate_membrane.
+
+    Both callers add their own box-related kwargs (``shell``/``box``/``angles``
+    for an isotropic box, or nothing -- the box is set directly on the system
+    -- for a membrane) on top of this common base before calling the solvent
+    function.
+    """
+    kwargs: dict[str, Any] = {
+        "molecule": system,
+        "is_neutral": params.neutralize,
+    }
+    if params.ion_concentration is not None:
+        kwargs["ion_conc"] = params.ion_concentration
+    if work_dir is not None:
+        kwargs["work_dir"] = str(work_dir)
+    return kwargs
+
+
 def run_solvation(
     system: Any,
     params: SolvationParams,
@@ -157,11 +186,7 @@ def run_solvation(
     import BioSimSpace as BSS  # noqa: PLC0415
 
     solvent = _get_bss_solvent_function(BSS, params.water_model)
-
-    kwargs: dict[str, Any] = {
-        "molecule": system,
-        "is_neutral": params.neutralize,
-    }
+    kwargs = _base_solvent_kwargs(system, params, work_dir)
 
     if params.padding is not None:
         kwargs["shell"] = params.padding * BSS.Units.Length.nanometer
@@ -172,12 +197,6 @@ def run_solvation(
         box, angles = _make_bss_box(BSS, params.shape, params.box_size)
         kwargs["box"] = box
         kwargs["angles"] = angles
-
-    if params.ion_concentration is not None:
-        kwargs["ion_conc"] = params.ion_concentration
-
-    if work_dir is not None:
-        kwargs["work_dir"] = str(work_dir)
 
     return solvent(**kwargs)
 
@@ -203,15 +222,67 @@ def _make_bss_box(bss: Any, shape: BoxShape, size_nm: float) -> tuple[Any, Any]:
     raise ValueError(f"Unsupported solvation box shape: {shape!s}")
 
 
+def _strip_water_inside_membrane(
+    system: Any,
+    lipid_resnames: Sequence[str],
+    work_dir: Path | None = None,
+) -> Any:
+    """Strip water inside the membrane system."""
+    with tempfile.TemporaryDirectory(dir=work_dir) as tmp_dir:
+        gro_file, top_file = save_bss_system_to_gromacs(system, Path(tmp_dir) / "strip_check")
+
+        universe = mda.Universe(str(gro_file))
+        resnames = " ".join(sorted(set(lipid_resnames)))
+        lipids = universe.select_atoms(f"resname {resnames}")
+        if lipids.n_atoms == 0:
+            return system
+
+        lipids_z_min, lipids_z_max = lipids.positions[:, 2].min(), lipids.positions[:, 2].max()
+        bad_water = universe.select_atoms(
+            f"resname SOL and name OW and prop z > {lipids_z_min} and prop z < {lipids_z_max}"
+        )
+        if bad_water.n_atoms == 0:
+            return system
+
+        keep = universe.atoms - bad_water.residues.atoms
+        filtered_gro = Path(tmp_dir) / "_strip_filtered.gro"
+        keep.write(str(filtered_gro))
+
+        top_text = top_file.read_text()
+        marker = "[ molecules ]"
+        marker_pos = top_text.find(marker)
+        if marker_pos == -1:
+            raise RuntimeError(f"Could not find '{marker}' section in {top_file}")
+        head, tail = top_text[:marker_pos], top_text[marker_pos:]
+
+        def _replace_solvent_count(match: re.Match[str]) -> str:
+            return f"{match.group(1)}{int(match.group(2)) - bad_water.n_atoms}"
+
+        tail, n_subs = re.subn(
+            r"^(\s*SOL\s+)(\d+)\s*$",
+            _replace_solvent_count,
+            tail,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        if n_subs == 0:
+            raise RuntimeError(f"Could not find a SOL molecule count in the '{marker}' section of {top_file}")
+        top_file.write_text(head + tail)
+
+        return BSS.IO.readMolecules([str(filtered_gro), str(top_file)], make_whole=True)
+
+
 def solvate_membrane(
     system: Any,
     params: SolvationParams,
     z_padding_nm: float,
+    lipid_resnames: Sequence[str],
     work_dir: Path | None = None,
 ) -> Any:
     """Solvate a pre-built membrane-system with BioSimSpace.
 
     Unlike run_solvation (isotropic padding), this preserves x&y from the inputs system's own box extending only the z-vector.
+    Any waters placed inside of the membrane will be stripped.
     """
     dimensions = system._sire_object.property("space").dimensions()  # Å
     x, y, z = (dimension.value() / 10 for dimension in dimensions)  # nm
@@ -224,17 +295,10 @@ def solvate_membrane(
     system.setBox(new_box, angles=[90 * BSS.Units.Angle.degree] * 3)
 
     solvent = _get_bss_solvent_function(BSS, params.water_model)
-    kwargs: dict[str, Any] = {
-        "molecule": system,
-        "is_neutral": params.neutralize,
-    }
+    kwargs = _base_solvent_kwargs(system, params, work_dir)
 
-    if params.ion_concentration is not None:
-        kwargs["ion_conc"] = params.ion_concentration
-    if work_dir is not None:
-        kwargs["work_dir"] = str(work_dir)
-
-    return solvent(**kwargs)
+    solvated = solvent(**kwargs)
+    return _strip_water_inside_membrane(solvated, lipid_resnames, work_dir)
 
 
 def _get_bss_solvent_function(bss: Any, water_model: WaterModel) -> Any:
