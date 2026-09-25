@@ -99,9 +99,9 @@ def _parse_posre_indices(posre_path: Path) -> list[int]:
     indices: list[int] = []
     with posre_path.open(encoding="utf-8", errors="replace") as fh:
         for line in fh:
-            fields = line.split()
-            if len(fields) >= 2 and fields[0].isdigit() and int(fields[0]) > 0:  # noqa: PLR2004
-                indices.append(int(fields[0]))
+            match line.split():
+                case [index, _, *_] if index.isdigit() and int(index) > 0:
+                    indices.append(int(index))
     return indices
 
 
