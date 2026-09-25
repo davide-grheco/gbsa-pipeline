@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Callable, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import BioSimSpace as BSS
 
@@ -22,6 +22,7 @@ from gbsa_pipeline.parametrization import parametrize
 from gbsa_pipeline.solvation_bss import solvate_bss
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from gbsa_pipeline.config import RunConfig

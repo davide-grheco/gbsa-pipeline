@@ -62,7 +62,7 @@ def _heavy_atom_coords(modeller: Modeller) -> list[tuple[float, float, float]]:
     positions_nm = modeller.positions.value_in_unit(mm_unit.nanometer)
     return [
         (pos[0], pos[1], pos[2])
-        for atom, pos in zip(modeller.topology.atoms(), positions_nm)
+        for atom, pos in zip(modeller.topology.atoms(), positions_nm, strict=True)
         if atom.element is not None and atom.element.symbol != "H"
     ]
 
@@ -72,7 +72,7 @@ def _oxygen_atom_entries(modeller: Modeller) -> list[tuple[Any, tuple[float, flo
     positions_nm = modeller.positions.value_in_unit(mm_unit.nanometer)
     return [
         (atom.residue, (pos[0], pos[1], pos[2]))
-        for atom, pos in zip(modeller.topology.atoms(), positions_nm)
+        for atom, pos in zip(modeller.topology.atoms(), positions_nm, strict=True)
         if atom.element is not None and atom.element.symbol == "O"
     ]
 
