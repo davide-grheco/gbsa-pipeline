@@ -1,4 +1,4 @@
-"""Unit tests for gromacs_index: atom selection and index-file writing."""
+"""Unit tests for gromacs_index: resname-based atom selection and index-file writing."""
 
 from __future__ import annotations
 
@@ -7,25 +7,67 @@ from typing import TYPE_CHECKING
 import pytest
 
 from gbsa_pipeline.gromacs_index import (
-    select_receptor_and_ligand_atoms_by_number,
-    select_receptor_and_ligand_atoms_by_position,
+    identify_ligand_resname,
+    select_receptor_and_ligand_atoms,
     write_index,
 )
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _read_index(path: Path) -> str:
+    return path.read_text()
+
+
+def _gro_line(resid: int, resname: str, atomname: str, atomnum: int) -> str:
+    """One fixed-width GROMACS .gro atom line (resid, resname, atomname, atomnum, xyz)."""
+    x = 0.1 * atomnum
+    return f"{resid:5d}{resname:<5s}{atomname:>5s}{atomnum:5d}{x:8.3f}{0.0:8.3f}{0.0:8.3f}"
+
+
+def _write_gro(tmp_path: Path, atoms: list[tuple[int, str, str]]) -> Path:
+    """Write a minimal, MDAnalysis-readable .gro file.
+
+    ``atoms`` is a list of ``(resid, resname, atomname)``, one per atom, in
+    file order.
+    """
+    lines = ["Test", f"{len(atoms):5d}"]
+    for i, (resid, resname, atomname) in enumerate(atoms, start=1):
+        lines.append(_gro_line(resid, resname, atomname, i))
+    lines.append("   5.00000   5.00000   5.00000")
+
+    gro_file = tmp_path / "test.gro"
+    gro_file.write_text("\n".join(lines) + "\n")
+    return gro_file
+
+
+class _FakeResName:
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    def value(self) -> str:
+        return self._name
+
+
+class _FakeResidue:
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    def name(self) -> _FakeResName:
+        return _FakeResName(self._name)
+
 
 class _FakeMol:
-    def __init__(self, n_atoms: int, number: int) -> None:
-        self._n = n_atoms
-        self._num = number
+    def __init__(self, resnames: list[str]) -> None:
+        self._resnames = resnames
 
-    def atoms(self) -> range:
-        return range(self._n)
-
-    def number(self) -> int:
-        return self._num
+    def residues(self) -> list[_FakeResidue]:
+        return [_FakeResidue(n) for n in self._resnames]
 
 
 class _FakeSystem:
@@ -37,127 +79,166 @@ class _FakeSystem:
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# identify_ligand_resname
 # ---------------------------------------------------------------------------
 
 
-def _read_index(path: Path) -> str:
-    return path.read_text()
+def test_identify_ligand_resname_soluble_system() -> None:
+    """Protein + ligand + water + ions -- ligand is the only non-protein, non-solvent residue."""
+    system = _FakeSystem(
+        [
+            _FakeMol(["ALA", "GLY", "LEU"]),
+            _FakeMol(["MOL"]),
+            _FakeMol(["SOL"]),
+            _FakeMol(["NA"]),
+        ]
+    )
+
+    assert identify_ligand_resname(system) == "MOL"
+
+
+def test_identify_ligand_resname_membrane_reduced_system() -> None:
+    """Protein + ligand only (lipids/water already stripped) -- still finds the ligand."""
+    system = _FakeSystem([_FakeMol(["ASP", "VAL"]), _FakeMol(["LIG"])])
+
+    assert identify_ligand_resname(system) == "LIG"
+
+
+def test_identify_ligand_resname_does_not_depend_on_position() -> None:
+    """Ligand first, protein second -- still correctly identified (no positional assumption)."""
+    system = _FakeSystem([_FakeMol(["LIG"]), _FakeMol(["ASP", "VAL"]), _FakeMol(["SOL"])])
+
+    assert identify_ligand_resname(system) == "LIG"
+
+
+def test_identify_ligand_resname_raises_when_no_candidate() -> None:
+    """Everything looks like protein or solvent -- no ligand-like residue found."""
+    system = _FakeSystem([_FakeMol(["ALA", "GLY"]), _FakeMol(["SOL"]), _FakeMol(["NA"])])
+
+    with pytest.raises(ValueError, match="Could not identify"):
+        identify_ligand_resname(system)
+
+
+def test_identify_ligand_resname_raises_when_ambiguous() -> None:
+    """Two distinct non-protein, non-solvent residue names -- can't tell which is the ligand."""
+    system = _FakeSystem([_FakeMol(["ALA"]), _FakeMol(["LIG"]), _FakeMol(["COFACTOR"])])
+
+    with pytest.raises(ValueError, match="Ambiguous"):
+        identify_ligand_resname(system)
 
 
 # ---------------------------------------------------------------------------
-# select_receptor_and_ligand_atoms_by_number -- [system] (soluble) convention
+# select_receptor_and_ligand_atoms
 # ---------------------------------------------------------------------------
 
 
-def test_select_by_number_two_molecule_system() -> None:
-    """Protein at idx 0, ligand at idx 1 - correct 1-based atom numbers."""
-    protein = _FakeMol(3, number=1)
-    ligand = _FakeMol(2, number=2)
-    system = _FakeSystem([protein, ligand])
+def test_select_receptor_and_ligand_atoms_soluble_convention(tmp_path: Path) -> None:
+    """[system] (soluble) convention: protein + ligand + water + ions."""
+    gro_file = _write_gro(
+        tmp_path,
+        [
+            (1, "ALA", "CA"),
+            (1, "ALA", "CB"),
+            (2, "GLY", "CA"),
+            (3, "LIG", "C1"),
+            (3, "LIG", "C2"),
+            (4, "SOL", "OW"),
+            (5, "NA", "NA"),
+        ],
+    )
 
-    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(system, protein, ligand)
+    receptor, ligand = select_receptor_and_ligand_atoms(gro_file, "LIG")
 
-    assert receptor_atoms == [1, 2, 3]
-    assert ligand_atoms == [4, 5]
-
-
-def test_select_by_number_three_molecule_system() -> None:
-    """Protein + solvent + ligand - only protein and ligand atoms selected; offsets correct."""
-    protein = _FakeMol(5, number=1)
-    solvent = _FakeMol(10, number=2)
-    ligand = _FakeMol(3, number=3)
-    system = _FakeSystem([protein, solvent, ligand])
-
-    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(system, protein, ligand)
-
-    assert receptor_atoms == [1, 2, 3, 4, 5]
-    # 5 protein + 10 solvent + 1-based start
-    assert ligand_atoms == [16, 17, 18]
+    assert receptor == [1, 2, 3]
+    assert ligand == [4, 5]
 
 
-def test_select_by_number_protein_not_in_system() -> None:
-    """Protein absent from system - receptor selection comes back empty."""
-    protein = _FakeMol(3, number=1)
-    other = _FakeMol(2, number=2)
-    ligand = _FakeMol(2, number=3)
-    system = _FakeSystem([other, ligand])  # protein not included
+def test_select_receptor_and_ligand_atoms_membrane_convention_lipids_in_receptor(tmp_path: Path) -> None:
+    """[membrane] convention: lipids must join Receptor, not be dropped or excluded."""
+    gro_file = _write_gro(
+        tmp_path,
+        [
+            (1, "ALA", "CA"),
+            (1, "ALA", "CB"),
+            (2, "GLY", "CA"),
+            (3, "POP", "P8"),
+            (3, "POP", "C1"),
+            (4, "POP", "P8"),
+            (4, "POP", "C1"),
+            (5, "LIG", "C1"),
+            (5, "LIG", "C2"),
+        ],
+    )
 
-    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(system, protein, ligand)
+    receptor, ligand = select_receptor_and_ligand_atoms(gro_file, "LIG")
 
-    assert receptor_atoms == []
-    assert ligand_atoms == [3, 4]
-
-
-def test_select_by_number_ligand_not_in_system() -> None:
-    """Ligand absent from system - ligand selection comes back empty."""
-    protein = _FakeMol(3, number=1)
-    ligand = _FakeMol(2, number=2)
-    other = _FakeMol(2, number=3)
-    system = _FakeSystem([protein, other])  # ligand not included
-
-    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(system, protein, ligand)
-
-    assert receptor_atoms == [1, 2, 3]
-    assert ligand_atoms == []
+    assert receptor == [1, 2, 3, 4, 5, 6, 7]
+    assert ligand == [8, 9]
 
 
-# ---------------------------------------------------------------------------
-# select_receptor_and_ligand_atoms_by_position -- [membrane] convention
-# ---------------------------------------------------------------------------
+def test_select_receptor_and_ligand_atoms_does_not_assume_solvent_comes_last(tmp_path: Path) -> None:
+    """Water placed BEFORE the ligand in the file must still be excluded correctly.
 
-
-def test_select_by_position_lipids_land_in_receptor() -> None:
-    """Protein + multiple lipids + ligand -- lipids must join Receptor, not be dropped.
-
-    gmx_MMPBSA's own topology cleaning strips only water/ions from the
-    complex topology, never lipids -- if lipids were excluded here, the
-    Receptor+Ligand selection would no longer match that cleaned topology.
+    The previous position-based implementation assumed solvent/ions always
+    sit after the ligand; this must hold regardless of file order.
     """
-    protein = _FakeMol(3, number=1)
-    lipid1 = _FakeMol(2, number=2)
-    lipid2 = _FakeMol(2, number=3)
-    ligand = _FakeMol(2, number=4)
-    system = _FakeSystem([protein, lipid1, lipid2, ligand])
-
-    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_position(
-        system, n_solute_molecules=3, ligand=ligand
+    gro_file = _write_gro(
+        tmp_path,
+        [
+            (1, "SOL", "OW"),
+            (2, "NA", "NA"),
+            (3, "ALA", "CA"),
+            (4, "GLY", "CA"),
+            (5, "LIG", "C1"),
+            (6, "SOL", "OW"),
+        ],
     )
 
-    assert receptor_atoms == [1, 2, 3, 4, 5, 6, 7]
-    assert ligand_atoms == [8, 9]
+    receptor, ligand = select_receptor_and_ligand_atoms(gro_file, "LIG")
+
+    assert receptor == [3, 4]
+    assert ligand == [5]
 
 
-def test_select_by_position_water_and_ions_excluded() -> None:
-    """Water/ions placed after the ligand are excluded from both groups."""
-    protein = _FakeMol(3, number=1)
-    lipid = _FakeMol(2, number=2)
-    ligand = _FakeMol(2, number=3)
-    water = _FakeMol(3, number=4)
-    ion = _FakeMol(1, number=5)
-    system = _FakeSystem([protein, lipid, ligand, water, ion])
-
-    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_position(
-        system, n_solute_molecules=2, ligand=ligand
+def test_select_receptor_and_ligand_atoms_raises_on_hoh_water(tmp_path: Path) -> None:
+    """A prebuilt system naming crystallographic water "HOH" is rejected with a clear message."""
+    gro_file = _write_gro(
+        tmp_path,
+        [
+            (1, "ALA", "CA"),
+            (1, "ALA", "CB"),
+            (2, "GLY", "CA"),
+            (3, "LIG", "C1"),
+            (3, "LIG", "C2"),
+            (4, "HOH", "O"),
+        ],
     )
 
-    assert receptor_atoms == [1, 2, 3, 4, 5]
-    assert ligand_atoms == [6, 7]
+    with pytest.raises(ValueError, match="HOH"):
+        select_receptor_and_ligand_atoms(gro_file, "LIG")
 
 
-def test_select_by_position_ligand_not_in_system() -> None:
-    """Ligand absent from system - ligand selection comes back empty."""
-    protein = _FakeMol(3, number=1)
-    lipid = _FakeMol(2, number=2)
-    ligand = _FakeMol(2, number=99)  # not in system
-    system = _FakeSystem([protein, lipid])
+def test_select_receptor_and_ligand_atoms_raises_when_ligand_resname_is_solvent_name(tmp_path: Path) -> None:
+    """A ligand accidentally named "SOL" collides with a name cleantop() strips."""
+    gro_file = _write_gro(tmp_path, [(1, "ALA", "CA"), (2, "SOL", "OW")])
 
-    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_position(
-        system, n_solute_molecules=2, ligand=ligand
-    )
+    with pytest.raises(ValueError, match="SOL"):
+        select_receptor_and_ligand_atoms(gro_file, "SOL")
 
-    assert receptor_atoms == [1, 2, 3, 4, 5]
-    assert ligand_atoms == []
+
+def test_select_receptor_and_ligand_atoms_raises_when_ligand_absent(tmp_path: Path) -> None:
+    gro_file = _write_gro(tmp_path, [(1, "ALA", "CA"), (2, "SOL", "OW")])
+
+    with pytest.raises(RuntimeError, match="LIG"):
+        select_receptor_and_ligand_atoms(gro_file, "LIG")
+
+
+def test_select_receptor_and_ligand_atoms_raises_when_receptor_empty(tmp_path: Path) -> None:
+    """Everything besides the ligand is recognized solvent -- no receptor atoms remain."""
+    gro_file = _write_gro(tmp_path, [(1, "LIG", "C1"), (2, "SOL", "OW")])
+
+    with pytest.raises(RuntimeError, match="Protein"):
+        select_receptor_and_ligand_atoms(gro_file, "LIG")
 
 
 # ---------------------------------------------------------------------------

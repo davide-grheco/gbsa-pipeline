@@ -11,11 +11,7 @@ import BioSimSpace as BSS
 import MDAnalysis as mda
 
 from gbsa_pipeline.config import MembraneConfig
-from gbsa_pipeline.gromacs_index import (
-    select_receptor_and_ligand_atoms_by_number,
-    select_receptor_and_ligand_atoms_by_position,
-    write_index,
-)
+from gbsa_pipeline.gromacs_index import identify_ligand_resname, select_receptor_and_ligand_atoms, write_index
 from gbsa_pipeline.md import (
     npt_barostat_overrides,
     remove_clashing_solvent_waters,
@@ -320,11 +316,13 @@ def _stage_mmbsa(
     ``gromacs.top`` -- gmx_MMPBSA needs these, not the ``system.gro``/``.top``
     snapshot ``_run_md_stage`` separately re-exports.
 
-    Receptor/ligand identification relies on GROMACS round-trips never
-    reordering existing molecules, only appending new ones. For a
-    ``[system]`` run, ``parametrize()`` always places protein first and
-    ligand second, so :func:`select_receptor_and_ligand_atoms_by_number`
-    reads those positions directly off the raw production files.
+    The ligand's residue name is identified by composition, not by molecule
+    position/index (see :func:`~gbsa_pipeline.gromacs_index.identify_ligand_resname`),
+    and the Receptor/Ligand atom index selection passed to gmx_MMPBSA is then
+    computed from that name against the actual coordinate file gmx_MMPBSA
+    itself will load, via
+    :func:`~gbsa_pipeline.gromacs_index.select_receptor_and_ligand_atoms` --
+    no molecule-ordering assumption is needed for either step.
 
     For a ``[membrane]`` run, gmx_MMPBSA instead runs against a *reduced*
     protein+ligand-only system from :func:`extract_protein_ligand_system`
@@ -350,18 +348,14 @@ def _stage_mmbsa(
 
         reduced_system = extract_protein_ligand_system(system, n_solute_molecules, n_protein_molecules)
         complex_prefix = stage_dir / "complex"
-        _, top_file = save_bss_system_to_gromacs(reduced_system, complex_prefix)
+        gro_file, top_file = save_bss_system_to_gromacs(reduced_system, complex_prefix)
         BSS.IO.saveMolecules(str(complex_prefix), reduced_system, fileformat="pdb")
         structure_pdb = complex_prefix.with_suffix(".pdb")
         trajectory_pdb = stage_dir / "complex_traj.pdb"
         shutil.copy(structure_pdb, trajectory_pdb)
 
-        reduced_sire = reduced_system._sire_object
-        ligand_mol = list(reduced_sire)[n_protein_molecules]
-        receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_position(
-            reduced_sire, n_protein_molecules, ligand_mol
-        )
-        write_index(receptor_atoms, ligand_atoms, index_file)
+        ligand_resname = identify_ligand_resname(reduced_system._sire_object)
+        _write_mmbsa_index(gro_file, ligand_resname, index_file)
 
         mmpbsa_config = MMPBSAConfig(gb=None, pb=geometry.pb_params())
         input_file = mmpbsa_config.write(stage_dir / "mmpbsa.in")
@@ -377,12 +371,8 @@ def _stage_mmbsa(
             output_dir=stage_dir,
         )
 
-    production_sire = system._sire_object
-    molecules = list(production_sire)
-    protein_mol = molecules[0]
-    ligand_mol = molecules[1]
-    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(production_sire, protein_mol, ligand_mol)
-    write_index(receptor_atoms, ligand_atoms, index_file)
+    ligand_resname = identify_ligand_resname(system._sire_object)
+    _write_mmbsa_index(production_dir / "gromacs.gro", ligand_resname, index_file)
     mmpbsa_config = MMPBSAConfig()
     input_file = mmpbsa_config.write(stage_dir / "mmpbsa.in")
 
@@ -396,6 +386,17 @@ def _stage_mmbsa(
         ligand_group=1,
         output_dir=stage_dir,
     )
+
+
+def _write_mmbsa_index(coord_file: Path, ligand_resname: str, index_file: Path) -> None:
+    """Select Receptor/Ligand atoms from ``coord_file`` and write the GROMACS index gmx_MMPBSA needs.
+
+    Shared by both ``[system]`` and ``[membrane]`` branches of
+    :func:`_stage_mmbsa`, which otherwise repeated this same
+    select-then-write pair identically.
+    """
+    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms(coord_file, ligand_resname)
+    write_index(receptor_atoms, ligand_atoms, index_file)
 
 
 # ---------------------------------------------------------------------------

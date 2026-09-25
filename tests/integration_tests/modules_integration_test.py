@@ -30,7 +30,7 @@ from gbsa_pipeline.docking import (
     load_first_sdf_molecule,
     prepare_ligand_with_meeko,
 )
-from gbsa_pipeline.gromacs_index import select_receptor_and_ligand_atoms_by_number, write_index
+from gbsa_pipeline.gromacs_index import identify_ligand_resname, select_receptor_and_ligand_atoms, write_index
 from gbsa_pipeline.md import (
     remove_clashing_solvent_waters,
     run_heating,
@@ -594,22 +594,20 @@ def test_prepare_inputs_run_docking_parametrize_and_solvate_keeps_outputs(
     gbsa_dir = module_run_dir / "gbsa"
     gbsa_dir.mkdir(parents=True, exist_ok=True)
 
-    # BSS writes gromacs.tpr, gromacs.xtc, and gromacs.top into production_dir.
+    # BSS writes gromacs.gro/.tpr/.xtc/.top into production_dir.
     # The .tpr is required by gmx_MMPBSA for -cs (it rejects .gro).
     complex_tpr = production_dir / "gromacs.tpr"
     trajectory_xtc = production_dir / "gromacs.xtc"
     topology_top = production_dir / "gromacs.top"
+    coord_gro = production_dir / "gromacs.gro"
 
-    # Build the GROMACS index file from the production sire system.
-    # Molecule ordering after parametrization + solvation:
-    #   index 0 → protein, index 1 → GAFF ligand, remainder → water and ions.
+    # Ligand resname identified by composition, not by molecule position --
+    # selection itself reads resnames straight off the .gro, no .top needed.
     production_sire = production._sire_object
-    production_molecules = list(production_sire)
-    protein_mol = production_molecules[0]
-    ligand_mol = production_molecules[1]
+    ligand_resname = identify_ligand_resname(production_sire)
 
     index_file = gbsa_dir / "index.ndx"
-    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(production_sire, protein_mol, ligand_mol)
+    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms(coord_gro, ligand_resname)
     write_index(receptor_atoms, ligand_atoms, index_file)
     assert index_file.exists()
 

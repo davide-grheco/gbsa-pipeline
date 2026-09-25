@@ -15,7 +15,7 @@ from pathlib import Path
 import BioSimSpace as BSS
 import pytest
 
-from gbsa_pipeline.gromacs_index import select_receptor_and_ligand_atoms_by_number, write_index
+from gbsa_pipeline.gromacs_index import identify_ligand_resname, select_receptor_and_ligand_atoms, write_index
 from gbsa_pipeline.mmbsa import MMPBSAConfig, run_gmx_mmpbsa_from_gromacs
 
 TESTDATA = Path(__file__).resolve().parents[1] / "testdata" / "mmbsa"
@@ -31,11 +31,8 @@ def _load_bss_system(gro: Path, top: Path) -> object:
 
     BioSimSpace.IO.readMolecules is used for consistency with the rest of the
     pipeline.  The BSS system object is returned directly so that callers can
-    both iterate over molecules (for select_receptor_and_ligand_atoms_by_number)
-    and save to PDB format (required by gmx_MMPBSA for the -cs flag, which does
-    not accept .gro).
-    The caller is responsible for selecting the correct protein and ligand
-    molecules based on the known molecule ordering of their production system.
+    both iterate over molecules (for identify_ligand_resname) and save to PDB
+    format (required by gmx_MMPBSA for the -cs flag, which does not accept .gro).
     """
     return BSS.IO.readMolecules([str(gro), str(top)], make_whole=True)
 
@@ -79,16 +76,12 @@ def test_gbsa_full_run(tmp_path: Path) -> None:
     bss_system = _load_bss_system(COMPLEX_GRO, TOPOL_TOP)
     sire_system = bss_system._sire_object  # type: ignore[attr-defined]
 
-    # Iterate directly over the raw sire system for molecule identification.
-    molecules = list(sire_system)
-
-    # Molecule ordering for this system: protein (idx 0, 6645 atoms),
-    # ligand UNK (idx 1, 19 atoms), then water and ions.
-    protein = molecules[0]
-    ligand = molecules[1]
+    # Ligand resname identified by composition, not by molecule position --
+    # selection itself reads resnames straight off the .gro, no .top needed.
+    ligand_resname = identify_ligand_resname(sire_system)
 
     index_file = tmp_path / "index.ndx"
-    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(sire_system, protein, ligand)
+    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms(COMPLEX_GRO, ligand_resname)
     write_index(receptor_atoms, ligand_atoms, index_file)
     assert index_file.exists()
 
