@@ -136,7 +136,10 @@ def check_posre_consistency(
     by_index = {
         atom_id: (res_name, atom_name)
         for atom_id, res_name, atom_name in zip(
-            atoms.ids.tolist(), atoms.resnames.tolist(), atoms.names.tolist(), strict=True
+            atoms.ids.tolist(),
+            atoms.resnames.tolist(),
+            atoms.names.tolist(),
+            strict=True,
         )
     }
 
@@ -199,7 +202,11 @@ def find_extreme_atoms(
     return [
         (atom_id, res_name, atom_name, float(x), float(y), float(z))
         for atom_id, res_name, atom_name, (x, y, z) in zip(
-            extreme.ids.tolist(), extreme.resnames.tolist(), extreme.names.tolist(), coords_nm[mask], strict=True
+            extreme.ids.tolist(),
+            extreme.resnames.tolist(),
+            extreme.names.tolist(),
+            coords_nm[mask],
+            strict=True,
         )
     ]
 
