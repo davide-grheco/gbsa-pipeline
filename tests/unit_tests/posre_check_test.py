@@ -52,7 +52,7 @@ def test_check_posre_consistency_flags_solvent_and_nonbackbone(tmp_path: Path) -
     assert not result.ok
     assert result.n_restrained == 2
     assert result.unexpected == [(3, "SOL", "OW")]  # backbone CA passes, restrained water fails
-    assert result.first_twenty == [(1, "ALA", "CA"), (3, "SOL", "OW")]
+    assert result.missing_indices == []
 
 
 def test_check_posre_consistency_passes_for_backbone_only(tmp_path: Path) -> None:
@@ -67,6 +67,19 @@ def test_check_posre_consistency_passes_for_backbone_only(tmp_path: Path) -> Non
     assert result.n_restrained == 1
 
 
+def test_check_posre_consistency_flags_index_without_atom(tmp_path: Path) -> None:
+    gro = tmp_path / "system.gro"
+    posre = tmp_path / "posre.itp"
+    gro.write_text(_GRO, encoding="utf-8")
+    posre.write_text("  99     1  1000 1000 1000\n", encoding="utf-8")
+
+    result = check_posre_consistency(gro, posre)
+
+    assert not result.ok
+    assert result.missing_indices == [99]
+    assert result.unexpected == []
+
+
 def test_check_posre_consistency_missing_gro_is_not_ok(tmp_path: Path) -> None:
     posre = tmp_path / "posre.itp"
     posre.write_text(_POSRE, encoding="utf-8")
@@ -75,3 +88,4 @@ def test_check_posre_consistency_missing_gro_is_not_ok(tmp_path: Path) -> None:
 
     assert not result.ok
     assert result.n_restrained == 0
+    assert result.error is not None

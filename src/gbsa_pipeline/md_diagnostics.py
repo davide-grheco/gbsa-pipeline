@@ -31,6 +31,7 @@ import MDAnalysis as mda
 import numpy as np
 
 from gbsa_pipeline._constants import SOLVENT_RESIDUE_NAMES
+from gbsa_pipeline._paths import require_file
 from gbsa_pipeline._spatial import contact_pairs
 
 logger = logging.getLogger(__name__)
@@ -47,10 +48,15 @@ _BACKBONE_ATOM_NAMES: frozenset[str] = frozenset({"N", "CA", "C", "O"})
 class PosreCheckResult(NamedTuple):
     """Result of a position-restraint consistency check."""
 
-    ok: bool
     n_restrained: int
-    unexpected: list[tuple[int, str, str]]  # (atom_idx, res_name, atom_name)
-    first_twenty: list[tuple[int, str, str]]  # (atom_idx, res_name, atom_name)
+    unexpected: list[tuple[int, str, str]]  # restrained (index, res_name, atom_name) outside the expected set
+    missing_indices: list[int]  # restrained indices with no atom in the GRO
+    error: str | None = None  # set when the check could not run at all
+
+    @property
+    def ok(self) -> bool:
+        """True when the check ran and found nothing wrong."""
+        return self.error is None and not self.unexpected and not self.missing_indices
 
 
 # ---------------------------------------------------------------------------
@@ -113,56 +119,41 @@ def check_posre_consistency(
     """Validate that posre ITP indices point to expected backbone atoms.
 
     Reads ``posre_path`` for the list of restrained 1-based atom indices and
-    maps each index to the corresponding atom in ``gro_path``.  Returns a
-    ``PosreCheckResult`` with:
-
-    - ``ok`` — True when every restrained atom is in ``expected_atom_names``
-      and no solvent/ligand residue is restrained.
-    - ``n_restrained`` — total number of restrained atoms.
-    - ``unexpected`` — list of (index, res_name, atom_name) for atoms that
-      do not match the expected set.
-    - ``first_twenty`` — first 20 restrained atoms for inspection.
+    maps each index to the corresponding atom in ``gro_path``.  The check is
+    not ok when a restrained atom is a solvent residue or outside
+    ``expected_atom_names`` (``unexpected``), a restrained index has no atom
+    in the GRO (``missing_indices``), or an input file is unusable (``error``).
     """
-    if not gro_path.exists():
-        logger.warning("check_posre_consistency: GRO not found: %s", gro_path)
-        return PosreCheckResult(ok=False, n_restrained=0, unexpected=[], first_twenty=[])
-    if not posre_path.exists():
-        logger.warning("check_posre_consistency: posre ITP not found: %s", posre_path)
-        return PosreCheckResult(ok=False, n_restrained=0, unexpected=[], first_twenty=[])
+    try:
+        require_file(gro_path, "GRO file")
+        require_file(posre_path, "posre ITP file")
+    except (FileNotFoundError, ValueError) as exc:
+        logger.warning("check_posre_consistency: %s", exc)
+        return PosreCheckResult(n_restrained=0, unexpected=[], missing_indices=[], error=str(exc))
 
-    # Map 1-based GRO atom index → (res_name, atom_name); unknown indices
-    # resolve to ("?", "?"), which never matches the expected atom names.
+    # A posre ITP references atoms only by 1-based index; the GRO file supplies
+    # each atom's identity.
     atoms = mda.Universe(str(gro_path)).atoms
-    by_index = {
-        atom_id: (res_name, atom_name)
-        for atom_id, res_name, atom_name in zip(
-            atoms.ids.tolist(),
-            atoms.resnames.tolist(),
-            atoms.names.tolist(),
-            strict=True,
-        )
-    }
 
-    entries: list[tuple[int, str, str]] = []
-    for idx in _parse_posre_indices(posre_path):
-        res_name, atom_name = by_index.get(idx, ("?", "?"))
-        entries.append((idx, res_name, atom_name))
+    restrained = _parse_posre_indices(posre_path)
+    unexpected: list[tuple[int, str, str]] = []
+    missing_indices: list[int] = []
+    for idx in restrained:
+        if not 1 <= idx <= len(atoms):
+            missing_indices.append(idx)
+            continue
+        atom = atoms[idx - 1]
+        res_name, atom_name = str(atom.resname), str(atom.name)
+        if res_name in SOLVENT_RESIDUE_NAMES or atom_name not in expected_atom_names:
+            unexpected.append((idx, res_name, atom_name))
 
-    unexpected = [
-        (idx, res_name, atom_name)
-        for idx, res_name, atom_name in entries
-        if res_name in SOLVENT_RESIDUE_NAMES or atom_name not in expected_atom_names
-    ]
-
-    ok = len(unexpected) == 0
     result = PosreCheckResult(
-        ok=ok,
-        n_restrained=len(entries),
+        n_restrained=len(restrained),
         unexpected=unexpected,
-        first_twenty=entries[:20],
+        missing_indices=missing_indices,
     )
 
-    if ok:
+    if result.ok:
         logger.debug(
             "posre check PASSED: %d restrained atoms all in %s",
             result.n_restrained,
@@ -170,10 +161,11 @@ def check_posre_consistency(
         )
     else:
         logger.warning(
-            "posre check FAILED: %d of %d restrained atoms unexpected.\n  First 5 unexpected: %s",
+            "posre check FAILED: %d unexpected, %d without atoms (of %d restrained). First 5 unexpected: %s",
             len(unexpected),
+            len(missing_indices),
             result.n_restrained,
-            result.unexpected[:5],
+            unexpected[:5],
         )
 
     return result
