@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
 import numpy as np
 
+from gbsa_pipeline._constants import SOLVENT_RESIDUE_NAMES
 from gbsa_pipeline._gro_io import _GROAtom, _parse_gro
 from gbsa_pipeline._spatial import contact_pairs
 
@@ -36,11 +37,6 @@ logger = logging.getLogger(__name__)
 
 # Atom names considered "backbone" for position-restraint validation.
 _BACKBONE_ATOM_NAMES: frozenset[str] = frozenset({"N", "CA", "C", "O"})
-
-# Residue names that are bulk solvent or ions — should never be restrained.
-_SOLVENT_RESIDUE_NAMES: frozenset[str] = frozenset(
-    {"SOL", "HOH", "WAT", "TIP3", "TIP3P", "NA", "CL", "K", "MG", "CA", "ZN"}
-)
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +143,7 @@ def check_posre_consistency(
         if i < 20:  # noqa: PLR2004
             first_twenty.append(entry)
 
-        is_solvent = atom.res_name in _SOLVENT_RESIDUE_NAMES
+        is_solvent = atom.res_name in SOLVENT_RESIDUE_NAMES
         is_expected = atom.atom_name in expected_atom_names
         if is_solvent or not is_expected:
             unexpected.append(entry)
@@ -310,8 +306,8 @@ def _find_close_contacts_pdb(
     threshold_ang: float = 1.0,
 ) -> list[tuple[tuple, tuple, float]]:
     """Return pairs with distance below threshold (A), protein-solvent only."""
-    solvent = [r for r in records if r[1] in _SOLVENT_RESIDUE_NAMES and not any(math.isnan(v) for v in r[3:6])]
-    protein = [r for r in records if r[1] not in _SOLVENT_RESIDUE_NAMES and not any(math.isnan(v) for v in r[3:6])]
+    solvent = [r for r in records if r[1] in SOLVENT_RESIDUE_NAMES and not any(math.isnan(v) for v in r[3:6])]
+    protein = [r for r in records if r[1] not in SOLVENT_RESIDUE_NAMES and not any(math.isnan(v) for v in r[3:6])]
 
     if not protein or not solvent:
         return []
