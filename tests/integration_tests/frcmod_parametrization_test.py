@@ -97,14 +97,14 @@ def test_amber_input_output_dir_defaults_to_none(tmp_path: Path) -> None:
 
 
 def test_amber_ff_input_missing_frcmod_raises(tmp_path: Path) -> None:
-    """AmberFFInput raises ValueError when a frcmod file does not exist."""
-    with pytest.raises(ValueError, match="Files not found"):
+    """AmberFFInput raises a validation error when a frcmod file does not exist."""
+    with pytest.raises(ValueError, match="Path does not point to a file"):
         AmberFFInput(frcmod_files=(tmp_path / "nonexistent.frcmod",))
 
 
 def test_amber_ff_input_missing_mol2_raises(tmp_path: Path) -> None:
-    """AmberFFInput raises ValueError when a mol2 file does not exist."""
-    with pytest.raises(ValueError, match="Files not found"):
+    """AmberFFInput raises a validation error when a mol2 file does not exist."""
+    with pytest.raises(ValueError, match="Path does not point to a file"):
         AmberFFInput(residue_mol2s=(tmp_path / "nonexistent.mol2",))
 
 

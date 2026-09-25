@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any
 
 import BioSimSpace as BSS
 
@@ -19,7 +19,7 @@ from gbsa_pipeline.parametrization_models import (
 from gbsa_pipeline.parametrize_openmm import _parametrize_openmm
 from gbsa_pipeline.tleap import _parametrize_tleap
 
-PathLike = Union[str, Path]
+PathLike = str | Path
 
 __all__ = [
     "ParametrisedComplex",

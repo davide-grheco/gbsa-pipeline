@@ -44,7 +44,7 @@ from gbsa_pipeline.parametrization import (
     ParametrizationInput,
     parametrize,
 )
-from gbsa_pipeline.solvation_bss import solvate_parametrized_complex
+from gbsa_pipeline.solvation_box import SolvationParams, run_solvation
 
 TESTDATA = Path(__file__).parents[1] / "testdata"
 DOCKING_TESTDATA = TESTDATA / "docking"
@@ -463,7 +463,7 @@ def test_prepare_inputs_run_docking_parametrize_and_solvate_keeps_outputs(
     # ==========================================================================
     # SOLVATION — BSS.Solvent (gmx solvate) over solvate_openmm
     # ==========================================================================
-    # We use solvation_bss.solvate_parametrized_complex instead of
+    # We use solvation_box.run_solvation (BSS.Solvent) instead of
     # solvation_openmm.solvate_openmm because the OpenMM + ParmEd path
     # produces explicit O-H harmonic bond springs in the water topology
     # (ParmEd rigidWater=False), which have a force constant ~727 000x
@@ -478,9 +478,10 @@ def test_prepare_inputs_run_docking_parametrize_and_solvate_keeps_outputs(
 
     os.environ["GMX_MAXCONSTRWARN"] = "-1"
 
-    bss_system = solvate_parametrized_complex(
-        parametrized,
-        shell_nm=1.0,
+    dry_system = BSS.IO.readMolecules([str(parametrized.gro_file), str(parametrized.top_file)])
+    bss_system = run_solvation(
+        dry_system,
+        SolvationParams(padding=1.0, box_size=None, neutralize=False, ion_concentration=0.0),
         work_dir=solvation_dir,
     )
 
