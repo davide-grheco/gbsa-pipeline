@@ -94,7 +94,7 @@ ban-relative-imports = "all"
 known-first-party = ["gbsa_pipeline"]
 
 [lint.flake8-type-checking]
-runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+runtime-evaluated-base-classes = ["pydantic.BaseModel", "gbsa_pipeline._pydantic.StrictModel"]
 
 [lint.pydocstyle]
 convention = "google"

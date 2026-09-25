@@ -7,7 +7,9 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Self
 
 import BioSimSpace as BSS
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
+
+from gbsa_pipeline._pydantic import StrictModel
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -89,7 +91,7 @@ class BoxShape(StrEnum):
         return self.value
 
 
-class SolvationParams(BaseModel):
+class SolvationParams(StrictModel):
     """Validated parameters for solvent-box construction.
 
     This model is the input boundary for user-facing solvation settings. It
@@ -99,8 +101,6 @@ class SolvationParams(BaseModel):
     config-style inputs. ``box_size`` may be ``None`` when padding-based box
     construction is used.
     """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     water_model: WaterModel = WaterModel.TIP3P
     shape: BoxShape = BoxShape.CUBIC

@@ -18,8 +18,9 @@ import tempfile
 from pathlib import Path
 
 import parmed as pmd
-from pydantic import BaseModel, ConfigDict, FilePath, field_validator
+from pydantic import FilePath, field_validator
 
+from gbsa_pipeline._pydantic import StrictModel
 from gbsa_pipeline.parametrization import ParametrisedComplex, ParametrizationConfig
 from gbsa_pipeline.parametrization_enum import LigandFF, ProteinFF
 
@@ -73,7 +74,7 @@ def _find_amber_parm_dir() -> Path:
 # ---------------------------------------------------------------------------
 
 
-class AmberFFInput(BaseModel):
+class AmberFFInput(StrictModel):
     """Inputs for converting AMBER frcmod + mol2 files to an OpenMM XML.
 
     The generated XML contains all atom types, bonded parameters, LJ
@@ -100,8 +101,6 @@ class AmberFFInput(BaseModel):
         Path where the unified XML is written. A file inside a temporary
         directory is used when ``None``.
     """
-
-    model_config = ConfigDict(frozen=True, extra="forbid", validate_default=True)
 
     frcmod_files: tuple[Path, ...] = ()
     residue_mol2s: tuple[Path, ...] = ()
@@ -187,7 +186,7 @@ def build_amber_ff_xml(inp: AmberFFInput) -> Path:
 # ---------------------------------------------------------------------------
 
 
-class AmberInput(BaseModel):
+class AmberInput(StrictModel):
     """Validated inputs for loading a pre-parametrized AMBER system.
 
     Parameters
@@ -201,8 +200,6 @@ class AmberInput(BaseModel):
         Directory for GROMACS output files. A temporary directory is created
         when ``None``.
     """
-
-    model_config = ConfigDict(frozen=True, extra="forbid", validate_default=True)
 
     prmtop: FilePath
     inpcrd: FilePath

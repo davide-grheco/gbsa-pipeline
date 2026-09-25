@@ -9,9 +9,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import gemmi
-from pydantic import BaseModel, ConfigDict, Field, FilePath
+from pydantic import Field, FilePath
 
 from gbsa_pipeline._constants import WATER_RESIDUE_NAMES
+from gbsa_pipeline._pydantic import StrictModel
 from gbsa_pipeline.parametrization_enum import ChargeMethod, LigandFF, ProteinFF
 
 if TYPE_CHECKING:
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class ParametrizationConfig(BaseModel):
+class ParametrizationConfig(StrictModel):
     """Force field and charge method choices for a parametrization run.
 
     Defaults to AMBER ff14SB + GAFF2 + AM1-BCC.
@@ -39,8 +40,6 @@ class ParametrizationConfig(BaseModel):
     >>> ParametrizationConfig(protein_ff=ProteinFF.FF19SB)  # swap protein FF
     >>> ParametrizationConfig.amber14_gaff2_nagl()  # preset with NAGL charges
     """
-
-    model_config = ConfigDict(frozen=True, extra="forbid", validate_default=True)
 
     protein_ff: ProteinFF = ProteinFF.FF14SB
     ligand_ff: LigandFF = LigandFF.GAFF2
@@ -74,7 +73,7 @@ class ParametrizationConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class ParametrizationInput(BaseModel):
+class ParametrizationInput(StrictModel):
     """Validated inputs for a parametrization run.
 
     Parameters
@@ -97,8 +96,6 @@ class ParametrizationInput(BaseModel):
         Directory where intermediate and output files are written.
         When ``None`` a temporary directory is created automatically.
     """
-
-    model_config = ConfigDict(frozen=True, extra="forbid", validate_default=True)
 
     protein_pdb: FilePath
     ligand_sdf: FilePath
