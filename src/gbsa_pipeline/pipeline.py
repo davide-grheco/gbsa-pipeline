@@ -205,7 +205,7 @@ def _stage_minimize_cg(system: Any, stage_dir: Path) -> Any:
     return run_minimization(system, work_dir=stage_dir, params={"integrator": "cg"})
 
 
-def _restraint_selection(config: RunConfig, system: Any) -> str | list[int]:
+def _membrane_aware_restraint_selection(config: RunConfig, system: Any) -> str | list[int]:
     """Backbone-only restraint for soluble systems; backbone + lipid headgroups for membranes.
 
     BSS's "backbone" keyword has no concept of a membrane, so a membrane run
@@ -473,7 +473,7 @@ def run_pipeline(config: RunConfig, output_dir: Path) -> None:
         output_dir,
         lambda d: _stage_minimize_cg(system, d),
     )
-    restraint = _restraint_selection(config, system)
+    restraint = _membrane_aware_restraint_selection(config, system)
     system = _run_md_stage(
         "Stage 5/9: NVT Restrained Heating",
         "nvt_restrained",
