@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 import MDAnalysis as mda
 import numpy as np
 from MDAnalysis.analysis.leaflet import LeafletFinder, optimize_cutoff
+from MDAnalysis.core.selection import ProteinSelection
 
 from gbsa_pipeline.mmbsa import MEMBRANE_PERIODIC_PB_DEFAULTS, PBParams
 
@@ -29,6 +30,7 @@ __all__ = [
     "estimate_membrane_geometry",
     "extract_protein_ligand_system",
     "extract_receptor_pdb",
+    "is_protein_molecule",
     "lipid_headgroup_restraint_atoms",
 ]
 
@@ -223,6 +225,17 @@ def lipid_headgroup_restraint_atoms(
         )
 
     return indices
+
+
+def is_protein_molecule(mol: Any) -> bool:
+    """Whether every residue in ``mol`` is a standard amino acid.
+
+    Uses MDAnalysis's own maintained amino-acid name table (the same
+    mechanism :func:`extract_receptor_pdb` relies on via its ``"protein"``
+    selection) rather than identifying protein by exclusion of solvent/ion
+    species, which is unbounded (SO4, Mg2+, Zn2+, ...).
+    """
+    return {res.name() for res in mol.getResidues()} <= ProteinSelection.prot_res
 
 
 def extract_protein_ligand_system(

@@ -29,6 +29,7 @@ from gbsa_pipeline.md_io import save_bss_system_to_gromacs
 from gbsa_pipeline.membrane import (
     estimate_membrane_geometry,
     extract_protein_ligand_system,
+    is_protein_molecule,
     lipid_headgroup_restraint_atoms,
 )
 from gbsa_pipeline.mmbsa import MMPBSAConfig, run_gmx_mmpbsa_from_gromacs
@@ -342,9 +343,7 @@ def _stage_mmbsa(
 
         n_solute_molecules = prebuilt.nMolecules()
         prebuilt_mols = prebuilt.getMolecules()
-        n_protein_molecules = sum(
-            1 for mol in prebuilt_mols if not ({res.name() for res in mol.getResidues()} & lipid_resnames)
-        )
+        n_protein_molecules = sum(1 for mol in prebuilt_mols if is_protein_molecule(mol))
 
         universe = mda.Universe(str(production_dir / "system.gro"))
         geometry = estimate_membrane_geometry(universe, lipid_resnames=sorted(lipid_resnames))
