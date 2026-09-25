@@ -16,14 +16,14 @@ if TYPE_CHECKING:
 
 
 def load_first_sdf_molecule(path: Path, *, remove_hs: bool = False) -> Chem.Mol:
-    """Read the first valid molecule from an SDF file."""
+    """Read the first valid molecule from an SDF file, skipping unparsable records."""
     path = require_file(path, "SDF file")
 
     supplier = Chem.SDMolSupplier(str(path), removeHs=remove_hs)
-    molecule = supplier[0]
+    molecule = next((m for m in supplier if m is not None), None)
 
     if molecule is None:
-        raise ValueError(f"Could not read first molecule from SDF: {path}")
+        raise ValueError(f"Could not read any molecule from SDF: {path}")
 
     return molecule
 

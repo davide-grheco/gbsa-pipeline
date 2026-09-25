@@ -137,12 +137,9 @@ def _resolve_executable(name: str) -> str:
 
 def sdf_formal_charge(sdf_path: Path) -> int:
     """Return the total formal charge of the first molecule in an SDF file."""
-    from rdkit import Chem  # noqa: PLC0415
+    from gbsa_pipeline.mol_utils import load_first_sdf_molecule  # noqa: PLC0415
 
-    supplier = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
-    mol = next((m for m in supplier if m is not None), None)
-    if mol is None:
-        raise ValueError(f"Could not read any molecule from {sdf_path}")
+    mol = load_first_sdf_molecule(sdf_path)
     return sum(atom.GetFormalCharge() for atom in mol.GetAtoms())
 
 
