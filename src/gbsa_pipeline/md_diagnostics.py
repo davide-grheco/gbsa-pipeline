@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 import numpy as np
 
 from gbsa_pipeline._constants import SOLVENT_RESIDUE_NAMES
-from gbsa_pipeline._gro_io import _GROAtom, _parse_gro
+from gbsa_pipeline._gro_io import _parse_gro
 from gbsa_pipeline._spatial import contact_pairs
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,21 @@ def _parse_crash_pdb(pdb_path: Path) -> list[tuple[int, str, str, float, float, 
 # ---------------------------------------------------------------------------
 
 
+def _parse_posre_indices(posre_path: Path) -> list[int]:
+    """Return the 1-based restrained atom indices from a posre ITP file.
+
+    Restraint entries are lines whose first field is a positive integer
+    followed by at least one more field (function type, force constants).
+    """
+    indices: list[int] = []
+    with posre_path.open(encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            fields = line.split()
+            if len(fields) >= 2 and fields[0].isdigit() and int(fields[0]) > 0:  # noqa: PLR2004
+                indices.append(int(fields[0]))
+    return indices
+
+
 def check_posre_consistency(
     gro_path: Path,
     posre_path: Path,
@@ -115,45 +130,27 @@ def check_posre_consistency(
         logger.warning("check_posre_consistency: posre ITP not found: %s", posre_path)
         return PosreCheckResult(ok=False, n_restrained=0, unexpected=[], first_twenty=[])
 
-    atoms = _parse_gro(gro_path)
-    # Build atom_idx → atom map (1-based)
-    by_index: dict[int, _GROAtom] = {a.atom_idx: a for a in atoms}
+    # Map 1-based GRO atom index → (res_name, atom_name); unknown indices
+    # resolve to ("?", "?"), which never matches the expected atom names.
+    by_index = {a.atom_idx: (a.res_name, a.atom_name) for a in _parse_gro(gro_path)}
 
-    # Parse ITP: lines with 5 fields where first field is a non-negative integer
-    restrained_indices: list[int] = []
-    with posre_path.open(encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            parts = line.split()
-            if len(parts) >= 2 and parts[0].lstrip("-").isdigit() and int(parts[0]) > 0:  # noqa: PLR2004
-                with __import__("contextlib").suppress(ValueError):
-                    restrained_indices.append(int(parts[0]))
+    entries: list[tuple[int, str, str]] = []
+    for idx in _parse_posre_indices(posre_path):
+        res_name, atom_name = by_index.get(idx, ("?", "?"))
+        entries.append((idx, res_name, atom_name))
 
-    unexpected: list[tuple[int, str, str]] = []
-    first_twenty: list[tuple[int, str, str]] = []
-
-    for i, idx in enumerate(restrained_indices):
-        atom = by_index.get(idx)
-        if atom is None:
-            unexpected.append((idx, "?", "?"))
-            if i < 20:  # noqa: PLR2004
-                first_twenty.append((idx, "?", "?"))
-            continue
-
-        entry = (idx, atom.res_name, atom.atom_name)
-        if i < 20:  # noqa: PLR2004
-            first_twenty.append(entry)
-
-        is_solvent = atom.res_name in SOLVENT_RESIDUE_NAMES
-        is_expected = atom.atom_name in expected_atom_names
-        if is_solvent or not is_expected:
-            unexpected.append(entry)
+    unexpected = [
+        (idx, res_name, atom_name)
+        for idx, res_name, atom_name in entries
+        if res_name in SOLVENT_RESIDUE_NAMES or atom_name not in expected_atom_names
+    ]
 
     ok = len(unexpected) == 0
     result = PosreCheckResult(
         ok=ok,
-        n_restrained=len(restrained_indices),
+        n_restrained=len(entries),
         unexpected=unexpected,
-        first_twenty=first_twenty,
+        first_twenty=entries[:20],
     )
 
     if ok:
