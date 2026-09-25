@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     from pathlib import Path
 
+import MDAnalysis as mda
 import numpy as np
 
 from gbsa_pipeline._constants import SOLVENT_RESIDUE_NAMES
@@ -132,7 +133,13 @@ def check_posre_consistency(
 
     # Map 1-based GRO atom index → (res_name, atom_name); unknown indices
     # resolve to ("?", "?"), which never matches the expected atom names.
-    by_index = {a.atom_idx: (a.res_name, a.atom_name) for a in _parse_gro(gro_path)}
+    atoms = mda.Universe(str(gro_path)).atoms
+    by_index = {
+        atom_id: (res_name, atom_name)
+        for atom_id, res_name, atom_name in zip(
+            atoms.ids.tolist(), atoms.resnames.tolist(), atoms.names.tolist(), strict=True
+        )
+    }
 
     entries: list[tuple[int, str, str]] = []
     for idx in _parse_posre_indices(posre_path):
