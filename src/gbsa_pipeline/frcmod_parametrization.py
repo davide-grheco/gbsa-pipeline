@@ -19,6 +19,7 @@ from pathlib import Path
 import parmed as pmd
 from pydantic import FilePath
 
+from gbsa_pipeline._parmed_io import export_parmed_gromacs
 from gbsa_pipeline._paths import resolve_work_dir
 from gbsa_pipeline._pydantic import StrictModel
 from gbsa_pipeline.parametrization import ParametrisedComplex, ParametrizationConfig
@@ -217,10 +218,7 @@ def load_amber_complex(inp: AmberInput) -> ParametrisedComplex:
 
     structure = pmd.load_file(str(inp.prmtop), xyz=str(inp.inpcrd))
 
-    gro_file = work_dir / "complex.gro"
-    top_file = work_dir / "complex.top"
-    structure.save(str(top_file), format="gromacs")
-    structure.save(str(gro_file))
+    gro_file, top_file = export_parmed_gromacs(structure, work_dir)
 
     return ParametrisedComplex(
         gro_file=gro_file,

@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from gbsa_pipeline._gemmi_utils import filter_residues, residue_is_water, write_crystal_waters_pdb
+from gbsa_pipeline._parmed_io import export_parmed_gromacs
 from gbsa_pipeline._paths import resolve_work_dir
 from gbsa_pipeline.mol2_utils import _strip_mol2_or_original
 from gbsa_pipeline.parametrization_enum import LigandFF, ProteinFF
@@ -545,12 +546,7 @@ def _parametrize_tleap(inp: ParametrizationInput) -> ParametrisedComplex:
             f"tleap did not produce expected output files in {work_dir}. Check tleap.in and the tleap output."
         )
     struct = pmd.load_file(str(prmtop), str(inpcrd))
-    gro_file = work_dir / "complex.gro"
-    top_file = work_dir / "complex.top"
-    gro_file.unlink(missing_ok=True)
-    top_file.unlink(missing_ok=True)
-    struct.save(str(top_file), format="gromacs")
-    struct.save(str(gro_file))
+    gro_file, top_file = export_parmed_gromacs(struct, work_dir)
 
     return ParametrisedComplex(
         gro_file=gro_file,
