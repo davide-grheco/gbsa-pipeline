@@ -141,6 +141,33 @@ class SolvationParams(StrictModel):
         return self
 
 
+def _run_bss_solvent(
+    bss: Any,
+    system: Any,
+    params: SolvationParams,
+    work_dir: Path | str | None,
+    *,
+    shell: Any = None,
+    box: Any = None,
+    angles: Any = None,
+) -> Any:
+    """Call the BSS solvent function for ``params.water_model``.
+
+    ``ion_concentration=None`` means no added salt and ``work_dir=None`` lets
+    BSS pick a directory — resolved explicitly instead of relying on BSS defaults.
+    """
+    solvent = getattr(bss.Solvent, params.water_model.value)
+    return solvent(
+        molecule=system,
+        is_neutral=params.neutralize,
+        ion_conc=params.ion_concentration if params.ion_concentration is not None else 0,
+        work_dir=str(work_dir) if work_dir is not None else None,
+        shell=shell,
+        box=box,
+        angles=angles if angles is not None else [90 * bss.Units.Angle.degree] * 3,
+    )
+
+
 def run_solvation(
     system: Any,
     params: SolvationParams,
@@ -157,30 +184,15 @@ def run_solvation(
     """
     import BioSimSpace as BSS  # noqa: PLC0415
 
-    solvent = _get_bss_solvent_function(BSS, params.water_model)
-
-    kwargs: dict[str, Any] = {
-        "molecule": system,
-        "is_neutral": params.neutralize,
-    }
-
     if params.padding is not None:
-        kwargs["shell"] = params.padding * BSS.Units.Length.nanometer
-    else:
-        if params.box_size is None:
-            raise ValueError("BioSimSpace run_solvation requires params.box_size when padding is None.")
+        shell = params.padding * BSS.Units.Length.nanometer
+        return _run_bss_solvent(BSS, system, params, work_dir, shell=shell)
 
+    if params.box_size is not None:
         box, angles = _make_bss_box(BSS, params.shape, params.box_size)
-        kwargs["box"] = box
-        kwargs["angles"] = angles
+        return _run_bss_solvent(BSS, system, params, work_dir, box=box, angles=angles)
 
-    if params.ion_concentration is not None:
-        kwargs["ion_conc"] = params.ion_concentration
-
-    if work_dir is not None:
-        kwargs["work_dir"] = str(work_dir)
-
-    return solvent(**kwargs)
+    raise AssertionError("unreachable: SolvationParams guarantees padding or box_size")
 
 
 def _make_bss_box(bss: Any, shape: BoxShape, size_nm: float) -> tuple[Any, Any]:
@@ -224,19 +236,4 @@ def solvate_membrane(
 
     system.setBox(new_box, angles=[90 * BSS.Units.Angle.degree] * 3)
 
-    solvent = _get_bss_solvent_function(BSS, params.water_model)
-    kwargs: dict[str, Any] = {
-        "molecule": system,
-        "is_neutral": params.neutralize,
-    }
-
-    if params.ion_concentration is not None:
-        kwargs["ion_conc"] = params.ion_concentration
-    if work_dir is not None:
-        kwargs["work_dir"] = str(work_dir)
-
-    return solvent(**kwargs)
-
-
-def _get_bss_solvent_function(bss: Any, water_model: WaterModel) -> Any:
-    return getattr(bss.Solvent, water_model.value)
+    return _run_bss_solvent(BSS, system, params, work_dir)
