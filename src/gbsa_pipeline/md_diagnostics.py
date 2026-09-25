@@ -31,7 +31,6 @@ import MDAnalysis as mda
 import numpy as np
 
 from gbsa_pipeline._constants import SOLVENT_RESIDUE_NAMES
-from gbsa_pipeline._gro_io import _parse_gro
 from gbsa_pipeline._spatial import contact_pairs
 
 logger = logging.getLogger(__name__)
@@ -193,11 +192,15 @@ def find_extreme_atoms(
     """
     if not gro_path.exists():
         return []
-    atoms = _parse_gro(gro_path)
+    atoms = mda.Universe(str(gro_path)).atoms
+    coords_nm = atoms.positions / 10.0  # MDAnalysis positions are in Å
+    mask = np.abs(coords_nm).max(axis=1) > threshold_nm
+    extreme = atoms[mask]
     return [
-        (a.atom_idx, a.res_name, a.atom_name, a.x, a.y, a.z)
-        for a in atoms
-        if abs(a.x) > threshold_nm or abs(a.y) > threshold_nm or abs(a.z) > threshold_nm
+        (atom_id, res_name, atom_name, float(x), float(y), float(z))
+        for atom_id, res_name, atom_name, (x, y, z) in zip(
+            extreme.ids.tolist(), extreme.resnames.tolist(), extreme.names.tolist(), coords_nm[mask], strict=True
+        )
     ]
 
 
