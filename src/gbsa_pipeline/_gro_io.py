@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from typing import TYPE_CHECKING, NamedTuple
 
-from gbsa_pipeline._spatial import _Coords, _find_clashing_residues, _ResKey
+import MDAnalysis as mda
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -51,17 +52,6 @@ def _parse_gro_atom_line(line: str) -> _GROAtom:
         raise ValueError(f"Could not parse GRO atom line: {line!r}") from exc
 
 
-def _renumber_gro_atom_line(line: str, atom_number: int) -> str:
-    """Return a GRO atom line with an updated five-column atom number."""
-    if atom_number <= 0:
-        raise ValueError("atom_number must be positive.")
-    if atom_number > 99999:  # noqa: PLR2004
-        atom_number = atom_number % 100000
-        if atom_number == 0:
-            atom_number = 99999
-    return f"{line[:15]}{atom_number:5d}{line[20:]}"
-
-
 # ---------------------------------------------------------------------------
 # File-level parsers
 # ---------------------------------------------------------------------------
@@ -84,33 +74,6 @@ def _parse_gro(gro_path: Path) -> list[_GROAtom]:
 # ---------------------------------------------------------------------------
 
 
-def _classify_atoms(
-    atom_lines: list[str],
-    water_resnames: set[str],
-) -> tuple[list[tuple[_ResKey, _Coords]], list[_Coords]]:
-    """Split GRO atom lines into water ``(key, coords)`` pairs and solute coords."""
-    water_atoms: list[tuple[_ResKey, _Coords]] = []
-    solute_coords: list[_Coords] = []
-    for line in atom_lines:
-        atom = _parse_gro_atom_line(line)
-        coords: _Coords = (atom.x, atom.y, atom.z)
-        if atom.res_name in water_resnames:
-            water_atoms.append(((atom.res_num, atom.res_name), coords))
-        else:
-            solute_coords.append(coords)
-    return water_atoms, solute_coords
-
-
-def _find_clashing_water_residues(
-    atom_lines: list[str],
-    cutoff_nm: float,
-    water_resnames: set[str],
-) -> set[_ResKey]:
-    """Identify water residues clashing with solute atoms in a GRO atom-line list."""
-    water_atoms, solute_coords = _classify_atoms(atom_lines, water_resnames)
-    return _find_clashing_residues(water_atoms, solute_coords, cutoff_nm)
-
-
 def _write_cleaned_gro(
     input_gro: Path,
     output_gro: Path,
@@ -119,44 +82,18 @@ def _write_cleaned_gro(
 ) -> dict[str, int]:
     """Write a GRO file with clashing solvent waters removed.
 
-    Removes whole water residues whose atoms are within ``cutoff_nm`` of any
-    non-water atom, updates the atom count, and renumbers atom serials.
-    Returns a ``{resname: count}`` dict of removed molecules for topology patching.
+    Removes whole water residues with any atom within ``cutoff_nm`` of a
+    non-water atom (minimum-image aware). The MDAnalysis writer renumbers atom
+    serials and updates the atom count. Returns a ``{resname: count}`` dict of
+    removed molecules for topology patching.
     """
-    lines = input_gro.read_text(encoding="utf-8", errors="replace").splitlines()
-    if len(lines) < 3:  # noqa: PLR2004
-        raise ValueError(f"GRO file is too short: {input_gro}")
+    universe = mda.Universe(str(input_gro))
+    water = "resname " + " ".join(sorted(water_resnames))
+    clashing = universe.select_atoms(f"byres (({water}) and around {cutoff_nm * 10.0} (not ({water})))")
 
-    try:
-        atom_count = int(lines[1].strip())
-    except ValueError as exc:
-        raise ValueError(f"Could not read GRO atom count from {input_gro}") from exc
+    (universe.atoms - clashing).write(str(output_gro))
 
-    atom_lines = lines[2 : 2 + atom_count]
-    if len(atom_lines) != atom_count:
-        raise ValueError(f"GRO file ended before all atom records were read: {input_gro}")
-
-    clashing = _find_clashing_water_residues(atom_lines, cutoff_nm, water_resnames)
-
-    cleaned = [
-        line
-        for line in atom_lines
-        if not (
-            (atom := _parse_gro_atom_line(line)).res_name in water_resnames
-            and (atom.res_num, atom.res_name) in clashing
-        )
-    ]
-
-    removed_counts: dict[str, int] = {}
-    for _resnr, resname in clashing:
-        removed_counts[resname] = removed_counts.get(resname, 0) + 1
-
-    output_lines = [lines[0], f"{len(cleaned):5d}"]
-    output_lines.extend(_renumber_gro_atom_line(line, i) for i, line in enumerate(cleaned, start=1))
-    output_lines.append(lines[2 + atom_count])
-    output_gro.write_text("\n".join(output_lines) + "\n", encoding="utf-8")
-
-    return removed_counts
+    return dict(Counter(residue.resname for residue in clashing.residues))
 
 
 # ---------------------------------------------------------------------------
