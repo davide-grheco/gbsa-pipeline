@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import logging
-import tempfile
-from pathlib import Path
 from typing import Any
 
 import parmed as pmd
@@ -14,6 +12,7 @@ from openmmforcefields.generators import GAFFTemplateGenerator
 
 from gbsa_pipeline._constants import WATER_RESIDUE_NAMES
 from gbsa_pipeline._openmm_utils import _delete_residues_by_name, _load_pdb_as_modeller
+from gbsa_pipeline._paths import resolve_work_dir
 from gbsa_pipeline.parametrization_enum import LigandFF, ProteinFF
 from gbsa_pipeline.parametrization_models import (
     ParametrisedComplex,
@@ -62,8 +61,7 @@ def _assign_nagl_charges_direct(mol: Molecule) -> None:
 
 
 def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
-    work_dir = inp.work_dir or Path(tempfile.mkdtemp(prefix="gbsa_param_"))
-    work_dir.mkdir(parents=True, exist_ok=True)
+    work_dir = resolve_work_dir(inp.work_dir, prefix="gbsa_param_")
 
     # --- Protein -------------------------------------------------------
     logger.debug("Loading protein PDB: %s …", inp.protein_pdb)

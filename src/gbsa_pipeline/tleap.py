@@ -6,14 +6,17 @@ import logging
 import re
 import shutil
 import subprocess
-import tempfile
 from dataclasses import dataclass, field
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import gemmi
 import parmed as pmd
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 from gbsa_pipeline._constants import WATER_RESIDUE_NAMES
+from gbsa_pipeline._paths import resolve_work_dir
 from gbsa_pipeline.mol2_utils import _strip_mol2_or_original
 from gbsa_pipeline.parametrization_enum import LigandFF, ProteinFF
 from gbsa_pipeline.parametrization_models import (
@@ -479,8 +482,7 @@ def _parametrize_tleap(inp: ParametrizationInput) -> ParametrisedComplex:
     resolves residue templates by name, so HETATM non-standard residues are
     parametrized correctly as long as a matching mol2 template is loaded first.
     """
-    work_dir = inp.work_dir or Path(tempfile.mkdtemp(prefix="gbsa_param_"))
-    work_dir.mkdir(parents=True, exist_ok=True)
+    work_dir = resolve_work_dir(inp.work_dir, prefix="gbsa_param_")
 
     all_frcmod_files = [p for p in inp.config.extra_ff_files if p.suffix.lower() == ".frcmod"]
     all_mol2_files = [p for p in inp.config.extra_ff_files if p.suffix.lower() == ".mol2"]

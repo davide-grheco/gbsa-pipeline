@@ -15,7 +15,7 @@ from meeko import (
 )
 from rdkit import Chem
 
-from gbsa_pipeline.docking._utils import _require_file
+from gbsa_pipeline._paths import require_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ def convert_receptor_pdb_to_pdbqt(
     Receptor hydrogen addition, protonation-state decisions, and structural
     cleanup are expected to happen upstream (e.g. in stack_protein_prep).
     """
-    receptor_pdb = _require_file(Path(receptor_pdb), "Receptor PDB")
+    receptor_pdb = require_file(Path(receptor_pdb), "Receptor PDB")
 
     if receptor_pdb.suffix.lower() != ".pdb":
         raise ValueError(f"Expected a .pdb receptor input, got: {receptor_pdb}")

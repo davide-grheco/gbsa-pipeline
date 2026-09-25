@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Self
 import BioSimSpace as BSS
 from pydantic import Field, field_validator, model_validator
 
+from gbsa_pipeline._paths import require_file
 from gbsa_pipeline._pydantic import StrictModel
 
 if TYPE_CHECKING:
@@ -28,11 +29,11 @@ class SolvatedComplex:
 
     def load_bss(self) -> Any:
         """Load this complex as a BioSimSpace System for MD stages."""
-        if not self.gro_file.exists() or not self.top_file.exists():
-            raise FileNotFoundError(f"SolvatedComplex files not found: {self.gro_file}, {self.top_file}.")
+        gro_file = require_file(self.gro_file, "SolvatedComplex coordinate file")
+        top_file = require_file(self.top_file, "SolvatedComplex topology file")
         import BioSimSpace as BSS  # noqa: PLC0415
 
-        return BSS.IO.readMolecules([str(self.gro_file), str(self.top_file)])
+        return BSS.IO.readMolecules([str(gro_file), str(top_file)])
 
 
 class WaterModel(StrEnum):
