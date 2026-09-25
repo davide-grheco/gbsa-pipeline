@@ -15,6 +15,7 @@ from meeko import (
 )
 from rdkit import Chem
 
+from gbsa_pipeline._gemmi_utils import append_chains, filter_residues, write_pdb
 from gbsa_pipeline._paths import require_file
 
 LOGGER = logging.getLogger(__name__)
@@ -29,13 +30,8 @@ def _strip_hetatm(receptor_pdb: Path, dest: Path) -> Path:
     Docking receptors should only contain protein atoms anyway.
     """
     st = gemmi.read_pdb(str(receptor_pdb))
-    for model in st:
-        for chain in model:
-            to_remove = [i for i, res in enumerate(chain) if res.het_flag == "H"]
-            for i in reversed(to_remove):
-                del chain[i]
-    st.write_pdb(str(dest))
-    return dest
+    filter_residues(st, lambda res: res.het_flag != "H")
+    return write_pdb(st, dest)
 
 
 def _merge_sdfs_into_pdb(pdb: Path, sdfs: list[Path], output: Path) -> Path:
@@ -52,12 +48,8 @@ def _merge_sdfs_into_pdb(pdb: Path, sdfs: list[Path], output: Path) -> Path:
         if mol is None:
             raise ValueError(f"Could not read cofactor SDF: {sdf}")
         pdb_block = Chem.MolToPDBBlock(mol) or ""
-        cofactor_st = gemmi.read_pdb_string(pdb_block)
-        for chain in cofactor_st[0]:
-            st[0].add_chain(chain, unique_name=True)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    st.write_pdb(str(output))
-    return output
+        append_chains(st, gemmi.read_pdb_string(pdb_block))
+    return write_pdb(st, output)
 
 
 def convert_receptor_pdb_to_pdbqt(
@@ -132,9 +124,5 @@ def merge_pdb_structures(base_pdb: Path, extra_pdb: Path, output_pdb: Path) -> P
     merged structure is written to output_pdb.
     """
     base_st = gemmi.read_pdb(str(base_pdb))
-    extra_st = gemmi.read_pdb(str(extra_pdb))
-    for chain in extra_st[0]:
-        base_st[0].add_chain(chain, unique_name=True)
-    output_pdb.parent.mkdir(parents=True, exist_ok=True)
-    base_st.write_pdb(str(output_pdb))
-    return output_pdb
+    append_chains(base_st, gemmi.read_pdb(str(extra_pdb)))
+    return write_pdb(base_st, output_pdb)

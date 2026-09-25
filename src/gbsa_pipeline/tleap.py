@@ -15,15 +15,11 @@ import parmed as pmd
 if TYPE_CHECKING:
     from pathlib import Path
 
-from gbsa_pipeline._constants import WATER_RESIDUE_NAMES
+from gbsa_pipeline._gemmi_utils import filter_residues, residue_is_water, write_crystal_waters_pdb
 from gbsa_pipeline._paths import resolve_work_dir
 from gbsa_pipeline.mol2_utils import _strip_mol2_or_original
 from gbsa_pipeline.parametrization_enum import LigandFF, ProteinFF
-from gbsa_pipeline.parametrization_models import (
-    ParametrisedComplex,
-    ParametrizationInput,
-    _write_crystal_waters_pdb,
-)
+from gbsa_pipeline.parametrization_models import ParametrisedComplex, ParametrizationInput
 
 logger = logging.getLogger(__name__)
 
@@ -96,14 +92,11 @@ def _write_dry_protein_pdb(protein_pdb: Path, output_pdb: Path) -> Path:
     }
 
     st = gemmi.read_pdb(str(protein_pdb))
+    filter_residues(st, lambda res: not residue_is_water(res))
 
     for model in st:
         for chain in model:
-            res_indices_to_remove: list[int] = []
-            for ri, residue in enumerate(chain):
-                if residue.name.upper() in WATER_RESIDUE_NAMES:
-                    res_indices_to_remove.append(ri)
-                    continue
+            for residue in chain:
                 resname = residue.name.upper()
                 atom_indices_to_remove: list[int] = []
                 for ai, atom in enumerate(residue):
@@ -115,8 +108,6 @@ def _write_dry_protein_pdb(protein_pdb: Path, output_pdb: Path) -> Path:
                             atom.name = new_name
                 for ai in reversed(atom_indices_to_remove):
                     del residue[ai]
-            for ri in reversed(res_indices_to_remove):
-                del chain[ri]
 
     output_pdb.parent.mkdir(parents=True, exist_ok=True)
     opts = gemmi.PdbWriteOptions()
@@ -508,7 +499,7 @@ def _parametrize_tleap(inp: ParametrizationInput) -> ParametrisedComplex:
         mcpb_info = None
         source_pdb = inp.protein_pdb
 
-    crystal_waters_pdb = _write_crystal_waters_pdb(source_pdb, work_dir / "crystal_waters.pdb")
+    crystal_waters_pdb = write_crystal_waters_pdb(source_pdb, work_dir / "crystal_waters.pdb")
     dry_pdb = _write_dry_protein_pdb(source_pdb, work_dir / "protein_dry.pdb")
 
     # Remap MCPB.py bond commands whose HETATM residue numbers differ from

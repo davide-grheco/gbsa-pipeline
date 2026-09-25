@@ -11,14 +11,11 @@ from openmm.app import ForceField, Modeller, NoCutoff
 from openmmforcefields.generators import GAFFTemplateGenerator
 
 from gbsa_pipeline._constants import WATER_RESIDUE_NAMES
+from gbsa_pipeline._gemmi_utils import write_crystal_waters_pdb
 from gbsa_pipeline._openmm_utils import _delete_residues_by_name, _load_pdb_as_modeller
 from gbsa_pipeline._paths import resolve_work_dir
 from gbsa_pipeline.parametrization_enum import LigandFF, ProteinFF
-from gbsa_pipeline.parametrization_models import (
-    ParametrisedComplex,
-    ParametrizationInput,
-    _write_crystal_waters_pdb,
-)
+from gbsa_pipeline.parametrization_models import ParametrisedComplex, ParametrizationInput
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +62,7 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
 
     # --- Protein -------------------------------------------------------
     logger.debug("Loading protein PDB: %s …", inp.protein_pdb)
-    crystal_waters_pdb = _write_crystal_waters_pdb(
+    crystal_waters_pdb = write_crystal_waters_pdb(
         inp.protein_pdb,
         work_dir / "crystal_waters.pdb",
     )

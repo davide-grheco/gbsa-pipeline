@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 import BioSimSpace as BSS
 import pytest
 
+from gbsa_pipeline._gemmi_utils import write_crystal_waters_pdb
 from gbsa_pipeline.mol2_utils import (
     _pdb_sidechain_names_by_depth,
     _strip_mol2_dipeptide_caps,
@@ -23,7 +24,6 @@ from gbsa_pipeline.parametrization import (
     parameterise_ligand_gaff2,
     parameterise_protein_amber,
 )
-from gbsa_pipeline.parametrization_models import _write_crystal_waters_pdb
 from gbsa_pipeline.tleap import _collect_pdb_resnums
 
 
@@ -153,7 +153,7 @@ def test_export_gromacs_top_gro(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# _write_crystal_waters_pdb tests
+# write_crystal_waters_pdb tests
 # ---------------------------------------------------------------------------
 
 _PROTEIN_WITH_WATERS = """\
@@ -178,7 +178,7 @@ def test_write_crystal_waters_pdb_extracts_waters(tmp_path: Path) -> None:
     out = tmp_path / "waters.pdb"
     src.write_text(_PROTEIN_WITH_WATERS, encoding="utf-8")
 
-    result = _write_crystal_waters_pdb(src, out)
+    result = write_crystal_waters_pdb(src, out)
 
     assert result == out
     assert out.exists()
@@ -194,7 +194,7 @@ def test_write_crystal_waters_pdb_returns_none_when_no_waters(tmp_path: Path) ->
     out = tmp_path / "waters.pdb"
     src.write_text(_PROTEIN_NO_WATERS, encoding="utf-8")
 
-    result = _write_crystal_waters_pdb(src, out)
+    result = write_crystal_waters_pdb(src, out)
 
     assert result is None
     assert not out.exists()
@@ -207,7 +207,7 @@ def test_write_crystal_waters_pdb_removes_stale_file(tmp_path: Path) -> None:
     src.write_text(_PROTEIN_NO_WATERS, encoding="utf-8")
     out.write_text("stale content", encoding="utf-8")
 
-    _write_crystal_waters_pdb(src, out)
+    write_crystal_waters_pdb(src, out)
 
     assert not out.exists()
 
