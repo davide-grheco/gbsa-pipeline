@@ -175,6 +175,19 @@ class GBParams:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+MEMBRANE_PERIODIC_PB_DEFAULTS: dict[str, Any] = {
+    "ipb": 1,
+    "bcopt": 10,
+    "nfocus": 1,
+    "solvopt": 2,
+    "fillratio": 1.25,
+    "cutnb": 99.0,
+    "cutfd": 7.0,
+    "maxsph": 8000,
+    "maxarcdot": 15000,
+}
+
+
 class PBParams(pydantic.BaseModel):
     """Parameters for the ``&pb`` (Poisson-Boltzmann) namelist section.
 
@@ -187,6 +200,7 @@ class PBParams(pydantic.BaseModel):
     also constrains two other defaults — see :meth:`_validate_membrane_settings`.  The
     ``extra`` dict provides a forward-compatible escape hatch for keywords
     added in newer gmx_MMPBSA versions.
+
     See https://valdes-tresanco-ms.github.io/gmx_MMPBSA/dev/input_file/#pb
     for the full reference.
     """
