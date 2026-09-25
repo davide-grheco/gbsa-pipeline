@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import tempfile
 from dataclasses import dataclass
 from enum import StrEnum
@@ -13,6 +12,7 @@ import BioSimSpace as BSS
 import MDAnalysis as mda
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from gbsa_pipeline._gro_io import _update_topology_water_counts
 from gbsa_pipeline.md_io import save_bss_system_to_gromacs
 
 if TYPE_CHECKING:
@@ -246,26 +246,7 @@ def _strip_water_inside_membrane(
         filtered_gro = Path(tmp_dir) / "_strip_filtered.gro"
         keep.write(str(filtered_gro))
 
-        top_text = top_file.read_text()
-        marker = "[ molecules ]"
-        marker_pos = top_text.find(marker)
-        if marker_pos == -1:
-            raise RuntimeError(f"Could not find '{marker}' section in {top_file}")
-        head, tail = top_text[:marker_pos], top_text[marker_pos:]
-
-        def _replace_solvent_count(match: re.Match[str]) -> str:
-            return f"{match.group(1)}{int(match.group(2)) - bad_water.n_atoms}"
-
-        tail, n_subs = re.subn(
-            r"^(\s*SOL\s+)(\d+)\s*$",
-            _replace_solvent_count,
-            tail,
-            count=1,
-            flags=re.MULTILINE,
-        )
-        if n_subs == 0:
-            raise RuntimeError(f"Could not find a SOL molecule count in the '{marker}' section of {top_file}")
-        top_file.write_text(head + tail)
+        _update_topology_water_counts(top_file, top_file, {"SOL": bad_water.n_atoms})
 
         return BSS.IO.readMolecules([str(filtered_gro), str(top_file)], make_whole=True)
 
