@@ -185,8 +185,8 @@ def lipid_headgroup_restraint_atoms(
     BSS's builtin "backbone"/"heavy"/"all" restraint keywords have no concept
     of a membrane -- "heavy" would restrain every non-hydrogen lipid tail atom
     too, freezing the whole bilayer instead of letting it relax around a fixed
-    protein and headgroups. Restraining only phosphate atoms (the same "P*"
-    name-prefix convention used by :func:`estimate_membrane_geometry`) mirrors
+    protein and headgroups. Restraining only phosphate atoms (identified by
+    element, not atom name -- naming conventions vary by force field) mirrors
     CHARMM-GUI's standard equilibration protocol, which restrains lipid
     headgroups -- not the full lipid -- alongside the protein backbone during
     early NVT/NPT equilibration, then releases them before production.
@@ -212,7 +212,7 @@ def lipid_headgroup_restraint_atoms(
                 for res in residues
                 if res.name() in resnames
                 for atom in res.getAtoms()
-                if atom.name().startswith("P")
+                if atom._sire_object.property("element").symbol() == "P"
             )
         atom_offset += mol.nAtoms()
 
