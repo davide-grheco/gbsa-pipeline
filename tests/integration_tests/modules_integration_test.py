@@ -30,7 +30,7 @@ from gbsa_pipeline.docking import (
     load_first_sdf_molecule,
     prepare_ligand_with_meeko,
 )
-from gbsa_pipeline.gromacs_index import write_index_from_system
+from gbsa_pipeline.gromacs_index import select_receptor_and_ligand_atoms_by_number, write_index
 from gbsa_pipeline.md import (
     remove_clashing_solvent_waters,
     run_heating,
@@ -609,7 +609,8 @@ def test_prepare_inputs_run_docking_parametrize_and_solvate_keeps_outputs(
     ligand_mol = production_molecules[1]
 
     index_file = gbsa_dir / "index.ndx"
-    write_index_from_system(production_sire, protein_mol, ligand_mol, index_file)
+    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(production_sire, protein_mol, ligand_mol)
+    write_index(receptor_atoms, ligand_atoms, index_file)
     assert index_file.exists()
 
     mmpbsa_input = gbsa_dir / "mmpbsa.in"

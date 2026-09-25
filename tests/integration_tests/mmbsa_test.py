@@ -15,7 +15,7 @@ from pathlib import Path
 import BioSimSpace as BSS
 import pytest
 
-from gbsa_pipeline.gromacs_index import write_index_from_system
+from gbsa_pipeline.gromacs_index import select_receptor_and_ligand_atoms_by_number, write_index
 from gbsa_pipeline.mmbsa import MMPBSAConfig, run_gmx_mmpbsa_from_gromacs
 
 TESTDATA = Path(__file__).resolve().parents[1] / "testdata" / "mmbsa"
@@ -31,8 +31,9 @@ def _load_bss_system(gro: Path, top: Path) -> object:
 
     BioSimSpace.IO.readMolecules is used for consistency with the rest of the
     pipeline.  The BSS system object is returned directly so that callers can
-    both iterate over molecules (for write_index_from_system) and save to PDB
-    format (required by gmx_MMPBSA for the -cs flag, which does not accept .gro).
+    both iterate over molecules (for select_receptor_and_ligand_atoms_by_number)
+    and save to PDB format (required by gmx_MMPBSA for the -cs flag, which does
+    not accept .gro).
     The caller is responsible for selecting the correct protein and ligand
     molecules based on the known molecule ordering of their production system.
     """
@@ -87,7 +88,8 @@ def test_gbsa_full_run(tmp_path: Path) -> None:
     ligand = molecules[1]
 
     index_file = tmp_path / "index.ndx"
-    write_index_from_system(sire_system, protein, ligand, index_file)
+    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(sire_system, protein, ligand)
+    write_index(receptor_atoms, ligand_atoms, index_file)
     assert index_file.exists()
 
     # gmx_MMPBSA requires -cs to be .tpr or .pdb — convert from .gro.

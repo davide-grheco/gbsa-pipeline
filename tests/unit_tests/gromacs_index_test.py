@@ -1,4 +1,4 @@
-"""Unit tests for gromacs_index.write_index_from_system."""
+"""Unit tests for gromacs_index: atom selection and index-file writing."""
 
 from __future__ import annotations
 
@@ -6,7 +6,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from gbsa_pipeline.gromacs_index import write_index_from_system
+from gbsa_pipeline.gromacs_index import (
+    select_receptor_and_ligand_atoms_by_number,
+    select_receptor_and_ligand_atoms_by_position,
+    write_index,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -42,82 +46,155 @@ def _read_index(path: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tests
+# select_receptor_and_ligand_atoms_by_number -- [system] (soluble) convention
 # ---------------------------------------------------------------------------
 
 
-def test_two_molecule_system(tmp_path: Path) -> None:
+def test_select_by_number_two_molecule_system() -> None:
     """Protein at idx 0, ligand at idx 1 - correct 1-based atom numbers."""
     protein = _FakeMol(3, number=1)
     ligand = _FakeMol(2, number=2)
     system = _FakeSystem([protein, ligand])
 
-    out = tmp_path / "test.ndx"
-    write_index_from_system(system, protein, ligand, out)
+    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(system, protein, ligand)
 
-    content = _read_index(out)
-    assert "[ Receptor ]" in content
-    assert "[ Ligand ]" in content
-    # Protein atoms: 1 2 3
-    assert "1 2 3" in content
-    # Ligand atoms: 4 5 (offset by protein size)
-    assert "4 5" in content
+    assert receptor_atoms == [1, 2, 3]
+    assert ligand_atoms == [4, 5]
 
 
-def test_three_molecule_system(tmp_path: Path) -> None:
-    """Protein + solvent + ligand - only protein and ligand atoms written; offsets correct."""
+def test_select_by_number_three_molecule_system() -> None:
+    """Protein + solvent + ligand - only protein and ligand atoms selected; offsets correct."""
     protein = _FakeMol(5, number=1)
     solvent = _FakeMol(10, number=2)
     ligand = _FakeMol(3, number=3)
     system = _FakeSystem([protein, solvent, ligand])
 
-    out = tmp_path / "test.ndx"
-    write_index_from_system(system, protein, ligand, out)
+    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(system, protein, ligand)
 
-    content = _read_index(out)
-    # Protein atoms: 1-5
-    assert "1 2 3 4 5" in content
-    # Ligand atoms: 16-18  (5 protein + 10 solvent + 1-based start)
-    assert "16 17 18" in content
+    assert receptor_atoms == [1, 2, 3, 4, 5]
+    # 5 protein + 10 solvent + 1-based start
+    assert ligand_atoms == [16, 17, 18]
 
 
-def test_write_group_line_wrapping(tmp_path: Path) -> None:
-    """16 protein atoms - first line has 15 atoms, second has 1."""
-    protein = _FakeMol(16, number=1)
-    ligand = _FakeMol(1, number=2)
-    system = _FakeSystem([protein, ligand])
-
-    out = tmp_path / "test.ndx"
-    write_index_from_system(system, protein, ligand, out)
-
-    content = _read_index(out)
-    lines = [ln for ln in content.splitlines() if ln and not ln.startswith("[")]
-    # First non-header line should have 15 numbers
-    first_line_nums = lines[0].split()
-    assert len(first_line_nums) == 15
-    # Second line has the 16th atom
-    second_line_nums = lines[1].split()
-    assert len(second_line_nums) == 1
-    assert second_line_nums[0] == "16"
-
-
-def test_protein_not_in_system(tmp_path: Path) -> None:
-    """Protein absent from system raises RuntimeError."""
+def test_select_by_number_protein_not_in_system() -> None:
+    """Protein absent from system - receptor selection comes back empty."""
     protein = _FakeMol(3, number=1)
     other = _FakeMol(2, number=2)
     ligand = _FakeMol(2, number=3)
     system = _FakeSystem([other, ligand])  # protein not included
 
-    with pytest.raises(RuntimeError, match="Protein"):
-        write_index_from_system(system, protein, ligand, tmp_path / "test.ndx")
+    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(system, protein, ligand)
+
+    assert receptor_atoms == []
+    assert ligand_atoms == [3, 4]
 
 
-def test_ligand_not_in_system(tmp_path: Path) -> None:
-    """Ligand absent from system raises RuntimeError."""
+def test_select_by_number_ligand_not_in_system() -> None:
+    """Ligand absent from system - ligand selection comes back empty."""
     protein = _FakeMol(3, number=1)
     ligand = _FakeMol(2, number=2)
     other = _FakeMol(2, number=3)
     system = _FakeSystem([protein, other])  # ligand not included
 
+    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(system, protein, ligand)
+
+    assert receptor_atoms == [1, 2, 3]
+    assert ligand_atoms == []
+
+
+# ---------------------------------------------------------------------------
+# select_receptor_and_ligand_atoms_by_position -- [membrane] convention
+# ---------------------------------------------------------------------------
+
+
+def test_select_by_position_lipids_land_in_receptor() -> None:
+    """Protein + multiple lipids + ligand -- lipids must join Receptor, not be dropped.
+
+    gmx_MMPBSA's own topology cleaning strips only water/ions from the
+    complex topology, never lipids -- if lipids were excluded here, the
+    Receptor+Ligand selection would no longer match that cleaned topology.
+    """
+    protein = _FakeMol(3, number=1)
+    lipid1 = _FakeMol(2, number=2)
+    lipid2 = _FakeMol(2, number=3)
+    ligand = _FakeMol(2, number=4)
+    system = _FakeSystem([protein, lipid1, lipid2, ligand])
+
+    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_position(
+        system, n_solute_molecules=3, ligand=ligand
+    )
+
+    assert receptor_atoms == [1, 2, 3, 4, 5, 6, 7]
+    assert ligand_atoms == [8, 9]
+
+
+def test_select_by_position_water_and_ions_excluded() -> None:
+    """Water/ions placed after the ligand are excluded from both groups."""
+    protein = _FakeMol(3, number=1)
+    lipid = _FakeMol(2, number=2)
+    ligand = _FakeMol(2, number=3)
+    water = _FakeMol(3, number=4)
+    ion = _FakeMol(1, number=5)
+    system = _FakeSystem([protein, lipid, ligand, water, ion])
+
+    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_position(
+        system, n_solute_molecules=2, ligand=ligand
+    )
+
+    assert receptor_atoms == [1, 2, 3, 4, 5]
+    assert ligand_atoms == [6, 7]
+
+
+def test_select_by_position_ligand_not_in_system() -> None:
+    """Ligand absent from system - ligand selection comes back empty."""
+    protein = _FakeMol(3, number=1)
+    lipid = _FakeMol(2, number=2)
+    ligand = _FakeMol(2, number=99)  # not in system
+    system = _FakeSystem([protein, lipid])
+
+    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_position(
+        system, n_solute_molecules=2, ligand=ligand
+    )
+
+    assert receptor_atoms == [1, 2, 3, 4, 5]
+    assert ligand_atoms == []
+
+
+# ---------------------------------------------------------------------------
+# write_index
+# ---------------------------------------------------------------------------
+
+
+def test_write_index_writes_receptor_and_ligand_groups(tmp_path: Path) -> None:
+    out = tmp_path / "test.ndx"
+    write_index([1, 2, 3], [4, 5], out)
+
+    content = _read_index(out)
+    assert "[ Receptor ]" in content
+    assert "[ Ligand ]" in content
+    assert "1 2 3" in content
+    assert "4 5" in content
+
+
+def test_write_index_line_wrapping(tmp_path: Path) -> None:
+    """16 receptor atoms - first line has 15 atoms, second has 1."""
+    out = tmp_path / "test.ndx"
+    write_index(list(range(1, 17)), [17], out)
+
+    content = _read_index(out)
+    lines = [ln for ln in content.splitlines() if ln and not ln.startswith("[")]
+    first_line_nums = lines[0].split()
+    assert len(first_line_nums) == 15
+    second_line_nums = lines[1].split()
+    assert len(second_line_nums) == 1
+    assert second_line_nums[0] == "16"
+
+
+def test_write_index_raises_when_receptor_empty(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="Protein"):
+        write_index([], [1, 2], tmp_path / "test.ndx")
+
+
+def test_write_index_raises_when_ligand_empty(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="Ligand"):
-        write_index_from_system(system, protein, ligand, tmp_path / "test.ndx")
+        write_index([1, 2, 3], [], tmp_path / "test.ndx")

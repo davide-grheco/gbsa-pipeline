@@ -12,8 +12,9 @@ import MDAnalysis as mda
 
 from gbsa_pipeline.config import MembraneConfig
 from gbsa_pipeline.gromacs_index import (
-    write_index_from_membrane_system,
-    write_index_from_system,
+    select_receptor_and_ligand_atoms_by_number,
+    select_receptor_and_ligand_atoms_by_position,
+    write_index,
 )
 from gbsa_pipeline.md import (
     npt_barostat_overrides,
@@ -322,8 +323,8 @@ def _stage_mmbsa(
     Receptor/ligand identification relies on GROMACS round-trips never
     reordering existing molecules, only appending new ones. For a
     ``[system]`` run, ``parametrize()`` always places protein first and
-    ligand second, so :func:`write_index_from_system` reads those positions
-    directly off the raw production files.
+    ligand second, so :func:`select_receptor_and_ligand_atoms_by_number`
+    reads those positions directly off the raw production files.
 
     For a ``[membrane]`` run, gmx_MMPBSA instead runs against a *reduced*
     protein+ligand-only system from :func:`extract_protein_ligand_system`
@@ -359,7 +360,10 @@ def _stage_mmbsa(
 
         reduced_sire = reduced_system._sire_object
         ligand_mol = list(reduced_sire)[n_protein_molecules]
-        write_index_from_membrane_system(reduced_sire, n_protein_molecules, ligand_mol, index_file)
+        receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_position(
+            reduced_sire, n_protein_molecules, ligand_mol
+        )
+        write_index(receptor_atoms, ligand_atoms, index_file)
 
         mmpbsa_config = MMPBSAConfig(gb=None, pb=geometry.pb_params())
         input_file = mmpbsa_config.write(stage_dir / "mmpbsa.in")
@@ -379,7 +383,8 @@ def _stage_mmbsa(
     molecules = list(production_sire)
     protein_mol = molecules[0]
     ligand_mol = molecules[1]
-    write_index_from_system(production_sire, protein_mol, ligand_mol, index_file)
+    receptor_atoms, ligand_atoms = select_receptor_and_ligand_atoms_by_number(production_sire, protein_mol, ligand_mol)
+    write_index(receptor_atoms, ligand_atoms, index_file)
     mmpbsa_config = MMPBSAConfig()
     input_file = mmpbsa_config.write(stage_dir / "mmpbsa.in")
 
