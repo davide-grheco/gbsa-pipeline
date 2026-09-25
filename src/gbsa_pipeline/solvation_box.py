@@ -145,28 +145,23 @@ class SolvationParams(BaseModel):
             raise ValueError("Either padding or box_size must be set.")
         return self
 
+    def solvent_kwargs(self, system: Any, work_dir: Path | str | None = None) -> dict[str, Any]:
+        """Build the BSS ``solvent()`` kwargs shared by run_solvation and solvate_membrane.
 
-def _base_solvent_kwargs(
-    system: Any,
-    params: SolvationParams,
-    work_dir: Path | str | None,
-) -> dict[str, Any]:
-    """Build the BSS ``solvent()`` kwargs shared by run_solvation and solvate_membrane.
-
-    Both callers add their own box-related kwargs (``shell``/``box``/``angles``
-    for an isotropic box, or nothing -- the box is set directly on the system
-    -- for a membrane) on top of this common base before calling the solvent
-    function.
-    """
-    kwargs: dict[str, Any] = {
-        "molecule": system,
-        "is_neutral": params.neutralize,
-    }
-    if params.ion_concentration is not None:
-        kwargs["ion_conc"] = params.ion_concentration
-    if work_dir is not None:
-        kwargs["work_dir"] = str(work_dir)
-    return kwargs
+        Both callers add their own box-related kwargs (``shell``/``box``/``angles``
+        for an isotropic box, or nothing -- the box is set directly on the system
+        -- for a membrane) on top of this common base before calling the solvent
+        function.
+        """
+        kwargs: dict[str, Any] = {
+            "molecule": system,
+            "is_neutral": self.neutralize,
+        }
+        if self.ion_concentration is not None:
+            kwargs["ion_conc"] = self.ion_concentration
+        if work_dir is not None:
+            kwargs["work_dir"] = str(work_dir)
+        return kwargs
 
 
 def run_solvation(
@@ -186,7 +181,7 @@ def run_solvation(
     import BioSimSpace as BSS  # noqa: PLC0415
 
     solvent = _get_bss_solvent_function(BSS, params.water_model)
-    kwargs = _base_solvent_kwargs(system, params, work_dir)
+    kwargs = params.solvent_kwargs(system, work_dir)
 
     if params.padding is not None:
         kwargs["shell"] = params.padding * BSS.Units.Length.nanometer
@@ -237,7 +232,10 @@ def _strip_water_inside_membrane(
         if lipids.n_atoms == 0:
             return system
 
-        lipids_z_min, lipids_z_max = lipids.positions[:, 2].min(), lipids.positions[:, 2].max()
+        lipids_z_min, lipids_z_max = (
+            lipids.positions[:, 2].min(),
+            lipids.positions[:, 2].max(),
+        )
         bad_water = universe.select_atoms(
             f"resname SOL and name OW and prop z > {lipids_z_min} and prop z < {lipids_z_max}"
         )
@@ -295,7 +293,7 @@ def solvate_membrane(
     system.setBox(new_box, angles=[90 * BSS.Units.Angle.degree] * 3)
 
     solvent = _get_bss_solvent_function(BSS, params.water_model)
-    kwargs = _base_solvent_kwargs(system, params, work_dir)
+    kwargs = params.solvent_kwargs(system, work_dir)
 
     solvated = solvent(**kwargs)
     return _strip_water_inside_membrane(solvated, lipid_resnames, work_dir)
