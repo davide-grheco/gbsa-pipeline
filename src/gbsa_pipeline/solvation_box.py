@@ -114,6 +114,7 @@ class SolvationParams(BaseModel):
     box_size: float | None = Field(default=8.0, gt=0.0)
     neutralize: bool = True
     ion_concentration: float | None = Field(default=None, ge=0.0)
+    solvate: bool = True
 
     @field_validator("water_model", "shape", mode="before")
     @classmethod

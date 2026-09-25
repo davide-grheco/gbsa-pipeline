@@ -164,7 +164,7 @@ def _stage_parametrize_membrane(config: RunConfig, stage_dir: Path) -> Any:
 def _stage_solvate_membrane(config: RunConfig, system: Any, stage_dir: Path) -> Any:
     """Solvate a membrane system, or pass it through unchanged if already solvated."""
     membrane = config.membrane or MembraneConfig()
-    if not membrane.solvate:
+    if not config.solvation.solvate:
         logger.info("solvate=False - system is already solvated, skipping.")
         return system
 

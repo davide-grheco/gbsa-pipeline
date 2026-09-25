@@ -66,9 +66,8 @@ class MembraneConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    solvate: bool = True
     lipid_resnames: frozenset[str] = frozenset(DEFAULT_LIPID_RESNAMES)
-    z_padding_nm: float = Field(default=1.5, ge=0.0)  # only used when system.solvate is True
+    z_padding_nm: float = Field(default=1.5, ge=0.0)  # only used when solvation.solvate is True
 
 
 class MinimizationConfig(BaseModel):
@@ -140,10 +139,12 @@ class RunConfig(BaseModel):
     top_file = "system.top"
     ligand   = "ligand.sdf"
     membrane = true
-    solvate  = true
 
     [membrane]
     z_padding_nm = 1.5
+
+    [solvation]
+    solvate = true
     ```
     """
 
