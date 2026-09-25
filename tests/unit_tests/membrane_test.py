@@ -15,6 +15,7 @@ from MDAnalysis.core.universe import Merge
 from gbsa_pipeline.membrane import (
     MembraneGeometry,
     estimate_membrane_geometry,
+    extract_receptor_pdb,
 )
 
 TESTDATA = Path(__file__).resolve().parents[1] / "testdata" / "membrane" / "1py6"
@@ -97,3 +98,17 @@ def test_membrane_geometry_pb_params() -> None:
     assert params.mctrdz == 50.0
     assert params.mthick == 39.4
     assert params.eneopt == 1
+
+
+def test_extract_receptor_pdb(tmp_path: Path) -> None:
+    """Only proteins atoms remain, lipids stripped for docking."""
+    output_pdb = tmp_path / "receptor.pdb"
+
+    result = extract_receptor_pdb(SYSTEM_2RH1, output_pdb)
+
+    assert result == output_pdb
+    assert output_pdb.exists()
+
+    written = mda.Universe(str(output_pdb))
+    assert written.atoms.n_atoms == 4597
+    assert "POP" not in set(written.atoms.resnames)
