@@ -6,21 +6,21 @@ import logging
 import re
 import shutil
 import subprocess
-import tempfile
 from dataclasses import dataclass, field
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import gemmi
 import parmed as pmd
 
-from gbsa_pipeline._constants import WATER_RESIDUE_NAMES
+if TYPE_CHECKING:
+    from pathlib import Path
+
+from gbsa_pipeline._gemmi_utils import filter_residues, residue_is_water, write_crystal_waters_pdb
+from gbsa_pipeline._parmed_io import export_parmed_gromacs
+from gbsa_pipeline._paths import resolve_work_dir
 from gbsa_pipeline.mol2_utils import _strip_mol2_or_original
 from gbsa_pipeline.parametrization_enum import LigandFF, ProteinFF
-from gbsa_pipeline.parametrization_models import (
-    ParametrisedComplex,
-    ParametrizationInput,
-    _write_crystal_waters_pdb,
-)
+from gbsa_pipeline.parametrization_models import ParametrisedComplex, ParametrizationInput
 
 logger = logging.getLogger(__name__)
 
@@ -93,14 +93,11 @@ def _write_dry_protein_pdb(protein_pdb: Path, output_pdb: Path) -> Path:
     }
 
     st = gemmi.read_pdb(str(protein_pdb))
+    filter_residues(st, lambda res: not residue_is_water(res))
 
     for model in st:
         for chain in model:
-            res_indices_to_remove: list[int] = []
-            for ri, residue in enumerate(chain):
-                if residue.name.upper() in WATER_RESIDUE_NAMES:
-                    res_indices_to_remove.append(ri)
-                    continue
+            for residue in chain:
                 resname = residue.name.upper()
                 atom_indices_to_remove: list[int] = []
                 for ai, atom in enumerate(residue):
@@ -112,8 +109,6 @@ def _write_dry_protein_pdb(protein_pdb: Path, output_pdb: Path) -> Path:
                             atom.name = new_name
                 for ai in reversed(atom_indices_to_remove):
                     del residue[ai]
-            for ri in reversed(res_indices_to_remove):
-                del chain[ri]
 
     output_pdb.parent.mkdir(parents=True, exist_ok=True)
     opts = gemmi.PdbWriteOptions()
@@ -142,12 +137,9 @@ def _resolve_executable(name: str) -> str:
 
 def sdf_formal_charge(sdf_path: Path) -> int:
     """Return the total formal charge of the first molecule in an SDF file."""
-    from rdkit import Chem  # noqa: PLC0415
+    from gbsa_pipeline.mol_utils import load_first_sdf_molecule  # noqa: PLC0415
 
-    supplier = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
-    mol = next((m for m in supplier if m is not None), None)
-    if mol is None:
-        raise ValueError(f"Could not read any molecule from {sdf_path}")
+    mol = load_first_sdf_molecule(sdf_path)
     return sum(atom.GetFormalCharge() for atom in mol.GetAtoms())
 
 
@@ -479,8 +471,7 @@ def _parametrize_tleap(inp: ParametrizationInput) -> ParametrisedComplex:
     resolves residue templates by name, so HETATM non-standard residues are
     parametrized correctly as long as a matching mol2 template is loaded first.
     """
-    work_dir = inp.work_dir or Path(tempfile.mkdtemp(prefix="gbsa_param_"))
-    work_dir.mkdir(parents=True, exist_ok=True)
+    work_dir = resolve_work_dir(inp.work_dir, prefix="gbsa_param_")
 
     all_frcmod_files = [p for p in inp.config.extra_ff_files if p.suffix.lower() == ".frcmod"]
     all_mol2_files = [p for p in inp.config.extra_ff_files if p.suffix.lower() == ".mol2"]
@@ -506,7 +497,7 @@ def _parametrize_tleap(inp: ParametrizationInput) -> ParametrisedComplex:
         mcpb_info = None
         source_pdb = inp.protein_pdb
 
-    crystal_waters_pdb = _write_crystal_waters_pdb(source_pdb, work_dir / "crystal_waters.pdb")
+    crystal_waters_pdb = write_crystal_waters_pdb(source_pdb, work_dir / "crystal_waters.pdb")
     dry_pdb = _write_dry_protein_pdb(source_pdb, work_dir / "protein_dry.pdb")
 
     # Remap MCPB.py bond commands whose HETATM residue numbers differ from
@@ -552,12 +543,7 @@ def _parametrize_tleap(inp: ParametrizationInput) -> ParametrisedComplex:
             f"tleap did not produce expected output files in {work_dir}. Check tleap.in and the tleap output."
         )
     struct = pmd.load_file(str(prmtop), str(inpcrd))
-    gro_file = work_dir / "complex.gro"
-    top_file = work_dir / "complex.top"
-    gro_file.unlink(missing_ok=True)
-    top_file.unlink(missing_ok=True)
-    struct.save(str(top_file), format="gromacs")
-    struct.save(str(gro_file))
+    gro_file, top_file = export_parmed_gromacs(struct, work_dir)
 
     return ParametrisedComplex(
         gro_file=gro_file,

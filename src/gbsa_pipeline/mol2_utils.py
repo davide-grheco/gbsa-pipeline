@@ -298,7 +298,8 @@ def _strip_mol2_dipeptide_caps(
         pdb_names_used: set[str] = set()
         for (elem, depth), sc_atoms in sorted(sc_by_elem_depth.items()):
             available = [n for n in pdb_names_by_depth.get((elem, depth), []) if n not in pdb_names_used]
-            for atom, pdb_name in zip(sc_atoms, available):
+
+            for atom, pdb_name in zip(sc_atoms, available, strict=False):
                 atom.name = pdb_name
                 pdb_names_used.add(pdb_name)
 

@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 
 import BioSimSpace as BSS
 
+from gbsa_pipeline._paths import require_file
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -33,20 +35,8 @@ def load_bss_system_from_gromacs(gro_file: Path, top_file: Path) -> sire.System:
     errors. It does not infer parent directories, stage names, or workflow
     metadata; those decisions belong to the external orchestration layer.
     """
-    gro_file = gro_file.resolve()
-    top_file = top_file.resolve()
-
-    if not gro_file.exists():
-        raise FileNotFoundError(f"GROMACS coordinate file not found: {gro_file}")
-
-    if not gro_file.is_file():
-        raise ValueError(f"GROMACS coordinate path is not a file: {gro_file}")
-
-    if not top_file.exists():
-        raise FileNotFoundError(f"GROMACS topology file not found: {top_file}")
-
-    if not top_file.is_file():
-        raise ValueError(f"GROMACS topology path is not a file: {top_file}")
+    gro_file = require_file(gro_file, "GROMACS coordinate file")
+    top_file = require_file(top_file, "GROMACS topology file")
 
     return BSS.IO.readMolecules([str(gro_file), str(top_file)])
 
