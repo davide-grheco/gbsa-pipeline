@@ -22,7 +22,7 @@ import MDAnalysis as mda
 import numpy as np
 from MDAnalysis.core.selection import ProteinSelection
 
-from gbsa_pipeline._constants import ION_RESIDUE_NAMES, WATER_RESIDUE_NAMES
+from gbsa_pipeline._constants import CLEANTOP_ION_RESIDUE_NAMES, WATER_RESIDUE_NAMES
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -80,7 +80,7 @@ _CLEANTOP_STRIPPED_RESNAMES: frozenset[str] = frozenset(
 # does not). Built from the package's shared water/ion name constants (see
 # gbsa_pipeline._constants) rather than a fresh list, so this stays in sync
 # with the names other stages already recognize as solvent.
-_LOOKS_LIKE_SOLVENT_RESNAMES: frozenset[str] = WATER_RESIDUE_NAMES | ION_RESIDUE_NAMES
+_LOOKS_LIKE_SOLVENT_RESNAMES: frozenset[str] = WATER_RESIDUE_NAMES | CLEANTOP_ION_RESIDUE_NAMES
 
 
 def identify_ligand_resname(system: sire.system.System) -> str:

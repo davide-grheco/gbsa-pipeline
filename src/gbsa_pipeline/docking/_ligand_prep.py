@@ -10,7 +10,8 @@ from rdkit import Chem
 from rdkit.Chem.rdDistGeom import EmbedMolecule
 from rdkit.Chem.rdForceFieldHelpers import UFFOptimizeMolecule
 
-from gbsa_pipeline.docking._utils import _extract_pdbqt_string_from_meeko_result, _require_file
+from gbsa_pipeline._paths import require_file
+from gbsa_pipeline.docking._utils import _extract_pdbqt_string_from_meeko_result
 from gbsa_pipeline.mol_utils import assign_bond_orders_from_template
 
 LOGGER = logging.getLogger(__name__)
@@ -87,7 +88,7 @@ def export_pdbqt_to_sdf(
     When ``template_mol`` is given every pose is passed through
     :func:`assign_bond_orders_from_template` before writing.
     """
-    pdbqt_path = _require_file(Path(pdbqt_path), "PDBQT file")
+    pdbqt_path = require_file(Path(pdbqt_path), "PDBQT file")
     output_sdf = Path(output_sdf).resolve()
     output_sdf.parent.mkdir(parents=True, exist_ok=True)
 

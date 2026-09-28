@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import shutil
 import time
-from typing import TYPE_CHECKING, Any, Callable, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import BioSimSpace as BSS
 import MDAnalysis as mda
@@ -35,7 +35,7 @@ from gbsa_pipeline.solvation_bss import solvate_bss
 
 if TYPE_CHECKING:
     import subprocess
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
     from pathlib import Path
 
     from gbsa_pipeline.config import RunConfig

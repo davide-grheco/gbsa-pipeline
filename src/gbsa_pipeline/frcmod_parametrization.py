@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 import parmed as pmd
-from pydantic import BaseModel, ConfigDict, FilePath, field_validator
+from pydantic import FilePath
 
+from gbsa_pipeline._parmed_io import export_parmed_gromacs
+from gbsa_pipeline._paths import resolve_work_dir
+from gbsa_pipeline._pydantic import StrictModel
 from gbsa_pipeline.parametrization import ParametrisedComplex, ParametrizationConfig
 from gbsa_pipeline.parametrization_enum import LigandFF, ProteinFF
 
@@ -73,7 +75,7 @@ def _find_amber_parm_dir() -> Path:
 # ---------------------------------------------------------------------------
 
 
-class AmberFFInput(BaseModel):
+class AmberFFInput(StrictModel):
     """Inputs for converting AMBER frcmod + mol2 files to an OpenMM XML.
 
     The generated XML contains all atom types, bonded parameters, LJ
@@ -101,21 +103,11 @@ class AmberFFInput(BaseModel):
         directory is used when ``None``.
     """
 
-    model_config = ConfigDict(frozen=True, extra="forbid", validate_default=True)
-
-    frcmod_files: tuple[Path, ...] = ()
-    residue_mol2s: tuple[Path, ...] = ()
+    frcmod_files: tuple[FilePath, ...] = ()
+    residue_mol2s: tuple[FilePath, ...] = ()
     protein_ff: ProteinFF = ProteinFF.FF14SB
     ligand_ff: LigandFF = LigandFF.GAFF2
     output_xml: Path | None = None
-
-    @field_validator("frcmod_files", "residue_mol2s", mode="before")
-    @classmethod
-    def _check_files_exist(cls, paths: tuple[Path, ...]) -> tuple[Path, ...]:
-        missing = [p for p in paths if not Path(p).exists()]
-        if missing:
-            raise ValueError("Files not found: " + ", ".join(str(p) for p in missing))
-        return tuple(Path(p) for p in paths)
 
 
 def build_amber_ff_xml(inp: AmberFFInput) -> Path:
@@ -177,7 +169,7 @@ def build_amber_ff_xml(inp: AmberFFInput) -> Path:
             f"Add a frcmod file that defines these types."
         )
 
-    output_xml = inp.output_xml or (Path(tempfile.mkdtemp(prefix="gbsa_ff_")) / "combined.xml")
+    output_xml = inp.output_xml or (resolve_work_dir(None, prefix="gbsa_ff_") / "combined.xml")
     ff.write(str(output_xml), write_unused=True)
     return output_xml
 
@@ -187,7 +179,7 @@ def build_amber_ff_xml(inp: AmberFFInput) -> Path:
 # ---------------------------------------------------------------------------
 
 
-class AmberInput(BaseModel):
+class AmberInput(StrictModel):
     """Validated inputs for loading a pre-parametrized AMBER system.
 
     Parameters
@@ -201,8 +193,6 @@ class AmberInput(BaseModel):
         Directory for GROMACS output files. A temporary directory is created
         when ``None``.
     """
-
-    model_config = ConfigDict(frozen=True, extra="forbid", validate_default=True)
 
     prmtop: FilePath
     inpcrd: FilePath
@@ -224,15 +214,11 @@ def load_amber_complex(inp: AmberInput) -> ParametrisedComplex:
     ParametrisedComplex
         Object with paths to the GROMACS coordinate and topology files.
     """
-    work_dir = inp.output_dir or Path(tempfile.mkdtemp(prefix="gbsa_amber_"))
-    work_dir.mkdir(parents=True, exist_ok=True)
+    work_dir = resolve_work_dir(inp.output_dir, prefix="gbsa_amber_")
 
     structure = pmd.load_file(str(inp.prmtop), xyz=str(inp.inpcrd))
 
-    gro_file = work_dir / "complex.gro"
-    top_file = work_dir / "complex.top"
-    structure.save(str(top_file), format="gromacs")
-    structure.save(str(gro_file))
+    gro_file, top_file = export_parmed_gromacs(structure, work_dir)
 
     return ParametrisedComplex(
         gro_file=gro_file,

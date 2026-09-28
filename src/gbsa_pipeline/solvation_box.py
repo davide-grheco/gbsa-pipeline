@@ -10,9 +10,11 @@ from typing import TYPE_CHECKING, Any, Self
 
 import BioSimSpace as BSS
 import MDAnalysis as mda
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from gbsa_pipeline._gro_io import _update_topology_water_counts
+from gbsa_pipeline._paths import require_file
+from gbsa_pipeline._pydantic import StrictModel
 from gbsa_pipeline.md_io import save_bss_system_to_gromacs
 
 if TYPE_CHECKING:
@@ -32,11 +34,11 @@ class SolvatedComplex:
 
     def load_bss(self) -> Any:
         """Load this complex as a BioSimSpace System for MD stages."""
-        if not self.gro_file.exists() or not self.top_file.exists():
-            raise FileNotFoundError(f"SolvatedComplex files not found: {self.gro_file}, {self.top_file}.")
+        gro_file = require_file(self.gro_file, "SolvatedComplex coordinate file")
+        top_file = require_file(self.top_file, "SolvatedComplex topology file")
         import BioSimSpace as BSS  # noqa: PLC0415
 
-        return BSS.IO.readMolecules([str(self.gro_file), str(self.top_file)])
+        return BSS.IO.readMolecules([str(gro_file), str(top_file)])
 
 
 class WaterModel(StrEnum):
@@ -95,7 +97,7 @@ class BoxShape(StrEnum):
         return self.value
 
 
-class SolvationParams(BaseModel):
+class SolvationParams(StrictModel):
     """Validated parameters for solvent-box construction.
 
     This model is the input boundary for user-facing solvation settings. It
@@ -105,8 +107,6 @@ class SolvationParams(BaseModel):
     config-style inputs. ``box_size`` may be ``None`` when padding-based box
     construction is used.
     """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     water_model: WaterModel = WaterModel.TIP3P
     shape: BoxShape = BoxShape.CUBIC
@@ -146,23 +146,32 @@ class SolvationParams(BaseModel):
             raise ValueError("Either padding or box_size must be set.")
         return self
 
-    def solvent_kwargs(self, system: Any, work_dir: Path | str | None = None) -> dict[str, Any]:
-        """Build the BSS ``solvent()`` kwargs shared by run_solvation and solvate_membrane.
 
-        Both callers add their own box-related kwargs (``shell``/``box``/``angles``
-        for an isotropic box, or nothing -- the box is set directly on the system
-        -- for a membrane) on top of this common base before calling the solvent
-        function.
-        """
-        kwargs: dict[str, Any] = {
-            "molecule": system,
-            "is_neutral": self.neutralize,
-        }
-        if self.ion_concentration is not None:
-            kwargs["ion_conc"] = self.ion_concentration
-        if work_dir is not None:
-            kwargs["work_dir"] = str(work_dir)
-        return kwargs
+def _run_bss_solvent(
+    bss: Any,
+    system: Any,
+    params: SolvationParams,
+    work_dir: Path | str | None,
+    *,
+    shell: Any = None,
+    box: Any = None,
+    angles: Any = None,
+) -> Any:
+    """Call the BSS solvent function for ``params.water_model``.
+
+    ``ion_concentration=None`` means no added salt and ``work_dir=None`` lets
+    BSS pick a directory — resolved explicitly instead of relying on BSS defaults.
+    """
+    solvent = getattr(bss.Solvent, params.water_model.value)
+    return solvent(
+        molecule=system,
+        is_neutral=params.neutralize,
+        ion_conc=params.ion_concentration if params.ion_concentration is not None else 0,
+        work_dir=str(work_dir) if work_dir is not None else None,
+        shell=shell,
+        box=box,
+        angles=angles if angles is not None else [90 * bss.Units.Angle.degree] * 3,
+    )
 
 
 def run_solvation(
@@ -181,20 +190,15 @@ def run_solvation(
     """
     import BioSimSpace as BSS  # noqa: PLC0415
 
-    solvent = _get_bss_solvent_function(BSS, params.water_model)
-    kwargs = params.solvent_kwargs(system, work_dir)
-
     if params.padding is not None:
-        kwargs["shell"] = params.padding * BSS.Units.Length.nanometer
-    else:
-        if params.box_size is None:
-            raise ValueError("BioSimSpace run_solvation requires params.box_size when padding is None.")
+        shell = params.padding * BSS.Units.Length.nanometer
+        return _run_bss_solvent(BSS, system, params, work_dir, shell=shell)
 
+    if params.box_size is not None:
         box, angles = _make_bss_box(BSS, params.shape, params.box_size)
-        kwargs["box"] = box
-        kwargs["angles"] = angles
+        return _run_bss_solvent(BSS, system, params, work_dir, box=box, angles=angles)
 
-    return solvent(**kwargs)
+    raise AssertionError("unreachable: SolvationParams guarantees padding or box_size")
 
 
 def _make_bss_box(bss: Any, shape: BoxShape, size_nm: float) -> tuple[Any, Any]:
@@ -274,12 +278,5 @@ def solvate_membrane(
 
     system.setBox(new_box, angles=[90 * BSS.Units.Angle.degree] * 3)
 
-    solvent = _get_bss_solvent_function(BSS, params.water_model)
-    kwargs = params.solvent_kwargs(system, work_dir)
-
-    solvated = solvent(**kwargs)
+    solvated = _run_bss_solvent(BSS, system, params, work_dir)
     return _strip_water_inside_membrane(solvated, lipid_resnames, work_dir)
-
-
-def _get_bss_solvent_function(bss: Any, water_model: WaterModel) -> Any:
-    return getattr(bss.Solvent, water_model.value)

@@ -6,13 +6,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
+
+from gbsa_pipeline._pydantic import StrictModel
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
 
-class DockingBox(BaseModel):
+class DockingBox(StrictModel):
     """Docking-box center and size in Angstrom.
 
     This model exists so Vina box inputs stay explicit and typed instead of
@@ -23,13 +25,11 @@ class DockingBox(BaseModel):
     stable interface needed by the Vina command-line backend.
     """
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
     center: tuple[float, float, float]
     size: tuple[float, float, float]
 
 
-class DockingRequest(BaseModel):
+class DockingRequest(StrictModel):
     """Normalized docking request for a receptor, one or more ligands, and a box.
 
     This model groups the core docking inputs into one validated object so the
@@ -40,8 +40,6 @@ class DockingRequest(BaseModel):
     We are currently checking mostly filesystem validity and suffix support here,
     leaving chemistry-specific validation to the preparation and export helpers.
     """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     receptor: Path
     ligands: list[Path]

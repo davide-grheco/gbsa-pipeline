@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolops, rdMolTransforms
 
+from gbsa_pipeline._paths import require_file
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -14,16 +16,14 @@ if TYPE_CHECKING:
 
 
 def load_first_sdf_molecule(path: Path, *, remove_hs: bool = False) -> Chem.Mol:
-    """Read the first valid molecule from an SDF file."""
-    path = path.resolve()
-    if not path.exists() or not path.is_file():
-        raise FileNotFoundError(f"SDF file not found: {path}")
+    """Read the first valid molecule from an SDF file, skipping unparsable records."""
+    path = require_file(path, "SDF file")
 
     supplier = Chem.SDMolSupplier(str(path), removeHs=remove_hs)
-    molecule = supplier[0]
+    molecule = next((m for m in supplier if m is not None), None)
 
     if molecule is None:
-        raise ValueError(f"Could not read first molecule from SDF: {path}")
+        raise ValueError(f"Could not read any molecule from SDF: {path}")
 
     return molecule
 

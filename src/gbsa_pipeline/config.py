@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 from typing import Any, Self
 
-import tomllib
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
 
+from gbsa_pipeline._pydantic import StrictModel
 from gbsa_pipeline.mdp import GromacsParams
 from gbsa_pipeline.membrane import DEFAULT_LIPID_RESNAMES
 from gbsa_pipeline.parametrization import ParametrizationConfig, ParametrizationInput
 from gbsa_pipeline.solvation_box import BoxShape, SolvationParams
 
 
-class SystemConfig(BaseModel):
+class SystemConfig(StrictModel):
     """[system] section — input files, charge settings, and system type.
 
     Either ``protein`` (a bare protein PDB to parametrize from scratch) or
@@ -25,8 +26,6 @@ class SystemConfig(BaseModel):
     :class:`MembraneConfig` for the bilayer-specific parameters that apply
     in that case.
     """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     protein: Path | None = None
     gro_file: Path | None = None
@@ -58,44 +57,36 @@ class SolvationConfig(SolvationParams):
     ion_concentration: float | None = Field(default=0.15, ge=0.0)
 
 
-class MembraneConfig(BaseModel):
+class MembraneConfig(StrictModel):
     """[membrane] section — lipid bilayer geometry.
 
     Only meaningful when ``[system]`` has ``membrane = true``.
     """
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
     lipid_resnames: frozenset[str] = frozenset(DEFAULT_LIPID_RESNAMES)
     z_padding_nm: float = Field(default=1.5, ge=0.0)  # only used when solvation.solvate is True
 
 
-class MinimizationConfig(BaseModel):
+class MinimizationConfig(StrictModel):
     """[minimization] section — energy minimization settings."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     nsteps: int = 10_000
     emtol: float = 10.0
 
 
-class EquilibrationConfig(BaseModel):
+class EquilibrationConfig(StrictModel):
     """[equilibration] section — NVT heating settings."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     simulation_time_ps: float = 50.0
 
 
-class NptConfig(BaseModel):
+class NptConfig(StrictModel):
     """[npt_equilibration] section — NPT equilibration time."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     simulation_time_ps: float = 100.0
 
 
-class RunConfig(BaseModel):
+class RunConfig(StrictModel):
     """Top-level configuration for a complete GBSA pipeline run.
 
     Load from a TOML file with :meth:`from_toml`. Each section maps to a
@@ -147,8 +138,6 @@ class RunConfig(BaseModel):
     solvate = true
     ```
     """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     system: SystemConfig
     membrane: MembraneConfig | None = None

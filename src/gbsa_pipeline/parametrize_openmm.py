@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import logging
-import tempfile
-from pathlib import Path
 from typing import Any
 
 import parmed as pmd
@@ -13,13 +11,12 @@ from openmm.app import ForceField, Modeller, NoCutoff
 from openmmforcefields.generators import GAFFTemplateGenerator
 
 from gbsa_pipeline._constants import WATER_RESIDUE_NAMES
+from gbsa_pipeline._gemmi_utils import write_crystal_waters_pdb
 from gbsa_pipeline._openmm_utils import _delete_residues_by_name, _load_pdb_as_modeller
+from gbsa_pipeline._parmed_io import export_parmed_gromacs
+from gbsa_pipeline._paths import resolve_work_dir
 from gbsa_pipeline.parametrization_enum import LigandFF, ProteinFF
-from gbsa_pipeline.parametrization_models import (
-    ParametrisedComplex,
-    ParametrizationInput,
-    _write_crystal_waters_pdb,
-)
+from gbsa_pipeline.parametrization_models import ParametrisedComplex, ParametrizationInput
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +59,11 @@ def _assign_nagl_charges_direct(mol: Molecule) -> None:
 
 
 def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
-    work_dir = inp.work_dir or Path(tempfile.mkdtemp(prefix="gbsa_param_"))
-    work_dir.mkdir(parents=True, exist_ok=True)
+    work_dir = resolve_work_dir(inp.work_dir, prefix="gbsa_param_")
 
     # --- Protein -------------------------------------------------------
     logger.debug("Loading protein PDB: %s …", inp.protein_pdb)
-    crystal_waters_pdb = _write_crystal_waters_pdb(
+    crystal_waters_pdb = write_crystal_waters_pdb(
         inp.protein_pdb,
         work_dir / "crystal_waters.pdb",
     )
@@ -195,15 +191,8 @@ def _parametrize_openmm(inp: ParametrizationInput) -> ParametrisedComplex:
     structure = pmd.openmm.load_topology(modeller.topology, system, modeller.positions)
     logger.debug("ParmEd structure ready (%d atoms).", len(structure.atoms))
 
-    gro_file = work_dir / "complex.gro"
-    top_file = work_dir / "complex.top"
-    gro_file.unlink(missing_ok=True)
-    top_file.unlink(missing_ok=True)
-    logger.debug("Writing GROMACS topology → %s …", top_file)
-    structure.save(str(top_file), format="gromacs")
-    logger.debug("Writing GROMACS coordinates → %s …", gro_file)
-    structure.save(str(gro_file))
-    logger.debug("GROMACS files written.")
+    gro_file, top_file = export_parmed_gromacs(structure, work_dir)
+    logger.debug("GROMACS files written: %s, %s.", gro_file, top_file)
 
     complex = ParametrisedComplex(
         gro_file=gro_file,
