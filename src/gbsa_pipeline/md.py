@@ -321,15 +321,24 @@ def _check_stage_posre(work_dir: Path, stage_name: str) -> None:
 
     for posre_path in posre_files:
         result = check_posre_consistency(gro, posre_path)
-        if not result.ok:
+        if result.error is not None:
+            logger.warning(
+                "%s: posre validation could not run for %s -- %s",
+                stage_name,
+                posre_path.name,
+                result.error,
+            )
+        elif not result.ok:
             logger.warning(
                 "%s: posre validation FAILED for %s -- "
-                "%d unexpected restrained atoms (first 5: %s). "
+                "%d unexpected restrained atoms (first 5: %s), %d indices with no matching atom (%s). "
                 "Check that the restraint file matches the GRO atom order.",
                 stage_name,
                 posre_path.name,
                 len(result.unexpected),
                 result.unexpected[:5],
+                len(result.missing_indices),
+                result.missing_indices[:5],
             )
         else:
             logger.debug(
