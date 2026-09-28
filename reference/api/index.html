@@ -2252,7 +2252,7 @@
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
+              Bases: <code><span title="gbsa_pipeline._pydantic.StrictModel">StrictModel</span></code></p>
 
 
 
@@ -2327,7 +2327,7 @@ output_xml:
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
+              Bases: <code><span title="gbsa_pipeline._pydantic.StrictModel">StrictModel</span></code></p>
 
 
 
@@ -2479,7 +2479,7 @@ crystal_waters_pdb:
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
+              Bases: <code><span title="gbsa_pipeline._pydantic.StrictModel">StrictModel</span></code></p>
 
 
 
@@ -2589,10 +2589,10 @@ ParametrizationConfig.amber14_gaff2_nagl()  # preset with NAGL charges</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/parametrization_models.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">56</span>
-<span class="normal">57</span>
-<span class="normal">58</span>
-<span class="normal">59</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">49</span>
+<span class="normal">50</span>
+<span class="normal">51</span>
+<span class="normal">52</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">amber14_gaff2</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ParametrizationConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;AMBER ff14SB + GAFF2 + AM1-BCC charges (default).&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">protein_ff</span><span class="o">=</span><span class="n">ProteinFF</span><span class="o">.</span><span class="n">FF14SB</span><span class="p">,</span> <span class="n">charge_method</span><span class="o">=</span><span class="n">ChargeMethod</span><span class="o">.</span><span class="n">AM1BCC</span><span class="p">)</span>
@@ -2625,10 +2625,10 @@ ParametrizationConfig.amber14_gaff2_nagl()  # preset with NAGL charges</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/parametrization_models.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">66</span>
-<span class="normal">67</span>
-<span class="normal">68</span>
-<span class="normal">69</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">59</span>
+<span class="normal">60</span>
+<span class="normal">61</span>
+<span class="normal">62</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">amber14_gaff2_nagl</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ParametrizationConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;AMBER ff14SB + GAFF2 + NAGL graph-neural-network charges.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">charge_method</span><span class="o">=</span><span class="n">ChargeMethod</span><span class="o">.</span><span class="n">NAGL</span><span class="p">)</span>
@@ -2661,10 +2661,10 @@ ParametrizationConfig.amber14_gaff2_nagl()  # preset with NAGL charges</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/parametrization_models.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">61</span>
-<span class="normal">62</span>
-<span class="normal">63</span>
-<span class="normal">64</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">54</span>
+<span class="normal">55</span>
+<span class="normal">56</span>
+<span class="normal">57</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">amber19_gaff2</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ParametrizationConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;AMBER ff19SB + GAFF2 + AM1-BCC charges.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">protein_ff</span><span class="o">=</span><span class="n">ProteinFF</span><span class="o">.</span><span class="n">FF19SB</span><span class="p">,</span> <span class="n">charge_method</span><span class="o">=</span><span class="n">ChargeMethod</span><span class="o">.</span><span class="n">AM1BCC</span><span class="p">)</span>
@@ -2695,7 +2695,7 @@ ParametrizationConfig.amber14_gaff2_nagl()  # preset with NAGL charges</p>
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
+              Bases: <code><span title="gbsa_pipeline._pydantic.StrictModel">StrictModel</span></code></p>
 
 
 
@@ -2767,7 +2767,7 @@ work_dir:
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
+              Bases: <code><span title="gbsa_pipeline._pydantic.StrictModel">StrictModel</span></code></p>
 
 
 
@@ -2881,23 +2881,23 @@ nested model. The <code>[md]</code> section accepts any field of
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/config.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">124</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span>
+<span class="normal">116</span>
+<span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
+<span class="normal">122</span>
+<span class="normal">123</span>
+<span class="normal">124</span>
 <span class="normal">125</span>
 <span class="normal">126</span>
 <span class="normal">127</span>
 <span class="normal">128</span>
-<span class="normal">129</span>
-<span class="normal">130</span>
-<span class="normal">131</span>
-<span class="normal">132</span>
-<span class="normal">133</span>
-<span class="normal">134</span>
-<span class="normal">135</span>
-<span class="normal">136</span>
-<span class="normal">137</span>
-<span class="normal">138</span>
-<span class="normal">139</span>
-<span class="normal">140</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
+<span class="normal">129</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">from_toml</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RunConfig</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Load and validate a :class:`RunConfig` from a TOML file.</span>
 
@@ -2950,7 +2950,18 @@ nested model. The <code>[md]</code> section accepts any field of
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/config.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">142</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span>
+<span class="normal">136</span>
+<span class="normal">137</span>
+<span class="normal">138</span>
+<span class="normal">139</span>
+<span class="normal">140</span>
+<span class="normal">141</span>
+<span class="normal">142</span>
 <span class="normal">143</span>
 <span class="normal">144</span>
 <span class="normal">145</span>
@@ -2968,18 +2979,7 @@ nested model. The <code>[md]</code> section accepts any field of
 <span class="normal">157</span>
 <span class="normal">158</span>
 <span class="normal">159</span>
-<span class="normal">160</span>
-<span class="normal">161</span>
-<span class="normal">162</span>
-<span class="normal">163</span>
-<span class="normal">164</span>
-<span class="normal">165</span>
-<span class="normal">166</span>
-<span class="normal">167</span>
-<span class="normal">168</span>
-<span class="normal">169</span>
-<span class="normal">170</span>
-<span class="normal">171</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">to_parametrization_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">work_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ParametrizationInput</span><span class="p">:</span>
+<span class="normal">160</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">to_parametrization_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">work_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ParametrizationInput</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a :class:`~gbsa_pipeline.parametrization.ParametrizationInput` from this config.</span>
 
 <span class="sd">    Parameters</span>
@@ -3105,19 +3105,19 @@ and direct loading by downstream MD stages.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/solvation_box.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">27</span>
-<span class="normal">28</span>
-<span class="normal">29</span>
-<span class="normal">30</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">30</span>
 <span class="normal">31</span>
 <span class="normal">32</span>
-<span class="normal">33</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_bss</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_bss</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Load this complex as a BioSimSpace System for MD stages.&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">gro_file</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">top_file</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
-        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SolvatedComplex files not found: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">gro_file</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">top_file</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+    <span class="n">gro_file</span> <span class="o">=</span> <span class="n">require_file</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gro_file</span><span class="p">,</span> <span class="s2">&quot;SolvatedComplex coordinate file&quot;</span><span class="p">)</span>
+    <span class="n">top_file</span> <span class="o">=</span> <span class="n">require_file</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">top_file</span><span class="p">,</span> <span class="s2">&quot;SolvatedComplex topology file&quot;</span><span class="p">)</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">BioSimSpace</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">BSS</span>  <span class="c1"># noqa: PLC0415</span>
 
-    <span class="k">return</span> <span class="n">BSS</span><span class="o">.</span><span class="n">IO</span><span class="o">.</span><span class="n">readMolecules</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gro_file</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">top_file</span><span class="p">)])</span>
+    <span class="k">return</span> <span class="n">BSS</span><span class="o">.</span><span class="n">IO</span><span class="o">.</span><span class="n">readMolecules</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">gro_file</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">top_file</span><span class="p">)])</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -3168,7 +3168,15 @@ ValueError
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/frcmod_parametrization.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">121</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">113</span>
+<span class="normal">114</span>
+<span class="normal">115</span>
+<span class="normal">116</span>
+<span class="normal">117</span>
+<span class="normal">118</span>
+<span class="normal">119</span>
+<span class="normal">120</span>
+<span class="normal">121</span>
 <span class="normal">122</span>
 <span class="normal">123</span>
 <span class="normal">124</span>
@@ -3221,15 +3229,7 @@ ValueError
 <span class="normal">171</span>
 <span class="normal">172</span>
 <span class="normal">173</span>
-<span class="normal">174</span>
-<span class="normal">175</span>
-<span class="normal">176</span>
-<span class="normal">177</span>
-<span class="normal">178</span>
-<span class="normal">179</span>
-<span class="normal">180</span>
-<span class="normal">181</span>
-<span class="normal">182</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">build_amber_ff_xml</span><span class="p">(</span><span class="n">inp</span><span class="p">:</span> <span class="n">AmberFFInput</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="normal">174</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">build_amber_ff_xml</span><span class="p">(</span><span class="n">inp</span><span class="p">:</span> <span class="n">AmberFFInput</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Build a unified OpenMM ForceField XML from AMBER frcmod and mol2 files.</span>
 
 <span class="sd">    Loads the base AMBER parameter files for the requested force fields, adds</span>
@@ -3288,7 +3288,7 @@ ValueError
             <span class="sa">f</span><span class="s2">&quot;Add a frcmod file that defines these types.&quot;</span>
         <span class="p">)</span>
 
-    <span class="n">output_xml</span> <span class="o">=</span> <span class="n">inp</span><span class="o">.</span><span class="n">output_xml</span> <span class="ow">or</span> <span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;gbsa_ff_&quot;</span><span class="p">))</span> <span class="o">/</span> <span class="s2">&quot;combined.xml&quot;</span><span class="p">)</span>
+    <span class="n">output_xml</span> <span class="o">=</span> <span class="n">inp</span><span class="o">.</span><span class="n">output_xml</span> <span class="ow">or</span> <span class="p">(</span><span class="n">resolve_work_dir</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;gbsa_ff_&quot;</span><span class="p">)</span> <span class="o">/</span> <span class="s2">&quot;combined.xml&quot;</span><span class="p">)</span>
     <span class="n">ff</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">output_xml</span><span class="p">),</span> <span class="n">write_unused</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">output_xml</span>
 </code></pre></div></td></tr></table></div>
@@ -3328,7 +3328,17 @@ ValueError
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/frcmod_parametrization.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">212</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">202</span>
+<span class="normal">203</span>
+<span class="normal">204</span>
+<span class="normal">205</span>
+<span class="normal">206</span>
+<span class="normal">207</span>
+<span class="normal">208</span>
+<span class="normal">209</span>
+<span class="normal">210</span>
+<span class="normal">211</span>
+<span class="normal">212</span>
 <span class="normal">213</span>
 <span class="normal">214</span>
 <span class="normal">215</span>
@@ -3343,21 +3353,7 @@ ValueError
 <span class="normal">224</span>
 <span class="normal">225</span>
 <span class="normal">226</span>
-<span class="normal">227</span>
-<span class="normal">228</span>
-<span class="normal">229</span>
-<span class="normal">230</span>
-<span class="normal">231</span>
-<span class="normal">232</span>
-<span class="normal">233</span>
-<span class="normal">234</span>
-<span class="normal">235</span>
-<span class="normal">236</span>
-<span class="normal">237</span>
-<span class="normal">238</span>
-<span class="normal">239</span>
-<span class="normal">240</span>
-<span class="normal">241</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_amber_complex</span><span class="p">(</span><span class="n">inp</span><span class="p">:</span> <span class="n">AmberInput</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ParametrisedComplex</span><span class="p">:</span>
+<span class="normal">227</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_amber_complex</span><span class="p">(</span><span class="n">inp</span><span class="p">:</span> <span class="n">AmberInput</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ParametrisedComplex</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Load an AMBER prmtop + inpcrd and export to GROMACS ``.gro`` / ``.top``.</span>
 
 <span class="sd">    Uses ParmEd to read the AMBER files directly and write the GROMACS files.</span>
@@ -3372,15 +3368,11 @@ ValueError
 <span class="sd">    ParametrisedComplex</span>
 <span class="sd">        Object with paths to the GROMACS coordinate and topology files.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">work_dir</span> <span class="o">=</span> <span class="n">inp</span><span class="o">.</span><span class="n">output_dir</span> <span class="ow">or</span> <span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;gbsa_amber_&quot;</span><span class="p">))</span>
-    <span class="n">work_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">work_dir</span> <span class="o">=</span> <span class="n">resolve_work_dir</span><span class="p">(</span><span class="n">inp</span><span class="o">.</span><span class="n">output_dir</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;gbsa_amber_&quot;</span><span class="p">)</span>
 
     <span class="n">structure</span> <span class="o">=</span> <span class="n">pmd</span><span class="o">.</span><span class="n">load_file</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">inp</span><span class="o">.</span><span class="n">prmtop</span><span class="p">),</span> <span class="n">xyz</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">inp</span><span class="o">.</span><span class="n">inpcrd</span><span class="p">))</span>
 
-    <span class="n">gro_file</span> <span class="o">=</span> <span class="n">work_dir</span> <span class="o">/</span> <span class="s2">&quot;complex.gro&quot;</span>
-    <span class="n">top_file</span> <span class="o">=</span> <span class="n">work_dir</span> <span class="o">/</span> <span class="s2">&quot;complex.top&quot;</span>
-    <span class="n">structure</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">top_file</span><span class="p">),</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;gromacs&quot;</span><span class="p">)</span>
-    <span class="n">structure</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">gro_file</span><span class="p">))</span>
+    <span class="n">gro_file</span><span class="p">,</span> <span class="n">top_file</span> <span class="o">=</span> <span class="n">export_parmed_gromacs</span><span class="p">(</span><span class="n">structure</span><span class="p">,</span> <span class="n">work_dir</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">ParametrisedComplex</span><span class="p">(</span>
         <span class="n">gro_file</span><span class="o">=</span><span class="n">gro_file</span><span class="p">,</span>
@@ -3531,8 +3523,7 @@ output_dir:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/gbsa_pipeline/pipeline.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">200</span>
-<span class="normal">201</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">201</span>
 <span class="normal">202</span>
 <span class="normal">203</span>
 <span class="normal">204</span>
@@ -3610,7 +3601,8 @@ output_dir:
 <span class="normal">276</span>
 <span class="normal">277</span>
 <span class="normal">278</span>
-<span class="normal">279</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">run_pipeline</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">RunConfig</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="normal">279</span>
+<span class="normal">280</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">run_pipeline</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">RunConfig</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Run the full GBSA pipeline from a validated :class:`~gbsa_pipeline.config.RunConfig`.</span>
 
 <span class="sd">    Stages (each writes output to a numbered subdirectory):</span>
