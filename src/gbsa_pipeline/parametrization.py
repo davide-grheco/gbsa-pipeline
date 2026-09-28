@@ -127,7 +127,7 @@ def parameterise_ligand_gaff2(
     charge_method: str = "BCC",
     work_dir: PathLike | None = None,
 ) -> BSS._SireWrappers.Molecule:
-    """Parameterise a ligand via BioSimSpace/antechamber (GAFF2).
+    """Parameterize a ligand via BioSimSpace/antechamber (GAFF2).
 
     Returns a BSS Molecule suitable for use with the BSS solvation and MD
     pipeline. For the OpenMM-based path use :func:`parametrize`.

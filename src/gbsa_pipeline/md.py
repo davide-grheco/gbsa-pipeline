@@ -68,7 +68,7 @@ from gbsa_pipeline.md_diagnostics import analyze_crash_frames, check_posre_consi
 from gbsa_pipeline.mdp import GromacsParams, field_to_mdp_key, set_mdp_key
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     import sire
 
@@ -321,15 +321,24 @@ def _check_stage_posre(work_dir: Path, stage_name: str) -> None:
 
     for posre_path in posre_files:
         result = check_posre_consistency(gro, posre_path)
-        if not result.ok:
+        if result.error is not None:
+            logger.warning(
+                "%s: posre validation could not run for %s -- %s",
+                stage_name,
+                posre_path.name,
+                result.error,
+            )
+        elif not result.ok:
             logger.warning(
                 "%s: posre validation FAILED for %s -- "
-                "%d unexpected restrained atoms (first 5: %s). "
+                "%d unexpected restrained atoms (first 5: %s), %d indices with no matching atom (%s). "
                 "Check that the restraint file matches the GRO atom order.",
                 stage_name,
                 posre_path.name,
                 len(result.unexpected),
                 result.unexpected[:5],
+                len(result.missing_indices),
+                result.missing_indices[:5],
             )
         else:
             logger.debug(
@@ -627,7 +636,7 @@ def run_heating(
     params: GromacsParams | Mapping[str, Any] | None = None,
     temperature_start: BSS.Types.Temperature = 50 * BSS.Units.Temperature.kelvin,
     temperature_end: BSS.Types.Temperature = 300 * BSS.Units.Temperature.kelvin,
-    restraint: str | None = "backbone",
+    restraint: str | Sequence[int] | None = "backbone",
     *,
     ignore_warnings: bool = True,
     max_time: int | None = None,
@@ -689,7 +698,7 @@ def run_npt_equilibration(
     heated: sire.System,
     work_dir: Path | None = None,
     params: GromacsParams | Mapping[str, Any] | None = None,
-    restraint: str | None = "backbone",
+    restraint: str | Sequence[int] | None = "backbone",
     *,
     ignore_warnings: bool = True,
     max_time: int | None = None,

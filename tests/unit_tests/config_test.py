@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from gbsa_pipeline.cli import main as cli_main
 from gbsa_pipeline.config import (
-    MembraneSystemConfig,
+    MembraneConfig,
     RunConfig,
     SolvationConfig,
     SystemConfig,
@@ -59,6 +59,7 @@ def test_from_toml_minimal(tmp_path: Path) -> None:
 
     cfg = RunConfig.from_toml(toml)
 
+    assert cfg.system is not None
     assert cfg.system.protein == protein
     assert cfg.system.ligand is None
     assert cfg.forcefield.protein_ff == ProteinFF.FF14SB
@@ -108,6 +109,7 @@ def test_from_toml_full(tmp_path: Path) -> None:
 
     cfg = RunConfig.from_toml(toml)
 
+    assert cfg.system is not None
     assert cfg.system.ligand == ligand
     assert cfg.system.net_charge == -1
     assert cfg.forcefield.protein_ff == ProteinFF.FF19SB
@@ -303,25 +305,72 @@ def test_cli_custom_output_dir(tmp_path: Path) -> None:
     assert parsed_output_dir == output_dir
 
 
-def test_membrane_system_config_defaults(tmp_path: Path) -> None:
+def test_system_config_membrane_defaults(tmp_path: Path) -> None:
     gro = tmp_path / "system.gro"
     top = tmp_path / "system.top"
+    ligand = tmp_path / "ligand.sdf"
+    gro.write_text("", encoding="utf-8")
+    top.write_text("", encoding="utf-8")
+    ligand.write_text("", encoding="utf-8")
+
+    cfg = SystemConfig(gro_file=gro, top_file=top, ligand=ligand, membrane=True)
+
+    assert cfg.protein is None
+    assert cfg.membrane is True
+
+
+def test_system_config_membrane_extra_field_forbidden(tmp_path: Path) -> None:
+    gro = tmp_path / "system.gro"
+    top = tmp_path / "system.top"
+    ligand = tmp_path / "ligand.sdf"
+    gro.write_text("", encoding="utf-8")
+    top.write_text("", encoding="utf-8")
+    ligand.write_text("", encoding="utf-8")
+
+    with pytest.raises(ValidationError):
+        SystemConfig(gro_file=gro, top_file=top, ligand=ligand, bad_field="x")  # type: ignore[call-arg]
+
+
+def test_system_config_rejects_neither_protein_nor_prebuilt() -> None:
+    with pytest.raises(ValidationError, match="Exactly one"):
+        SystemConfig()
+
+
+def test_system_config_rejects_both_protein_and_prebuilt(tmp_path: Path) -> None:
+    protein = tmp_path / "protein.pdb"
+    gro = tmp_path / "system.gro"
+    top = tmp_path / "system.top"
+    protein.write_text("", encoding="utf-8")
     gro.write_text("", encoding="utf-8")
     top.write_text("", encoding="utf-8")
 
-    cfg = MembraneSystemConfig(gro_file=gro, top_file=top)
+    with pytest.raises(ValidationError, match="Exactly one"):
+        SystemConfig(protein=protein, gro_file=gro, top_file=top)
 
-    assert cfg.solvate is True
+
+def test_system_config_rejects_gro_file_without_top_file(tmp_path: Path) -> None:
+    gro = tmp_path / "system.gro"
+    gro.write_text("", encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="must both be set together"):
+        SystemConfig(gro_file=gro)
+
+
+def test_system_config_rejects_membrane_with_bare_protein(tmp_path: Path) -> None:
+    protein = tmp_path / "protein.pdb"
+    protein.write_text("", encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="membrane=True requires"):
+        SystemConfig(protein=protein, membrane=True)
+
+
+def test_membrane_config_defaults() -> None:
+    cfg = MembraneConfig()
+
     assert cfg.z_padding_nm == 1.5
     assert "POPC" in cfg.lipid_resnames
 
 
-def test_membrane_system_config_extra_field_forbiodden(tmp_path: Path) -> None:
-
-    gro = tmp_path / "system.gro"
-    top = tmp_path / "system.top"
-    gro.write_text("", encoding="utf-8")
-    top.write_text("", encoding="utf-8")
-
+def test_membrane_config_extra_field_forbidden() -> None:
     with pytest.raises(ValidationError):
-        MembraneSystemConfig(gro_file=gro, top_file=top, bad_field="x")  # type: ignore[call-arg]
+        MembraneConfig(bad_field="x")  # type: ignore[call-arg]

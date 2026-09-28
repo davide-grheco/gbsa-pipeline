@@ -175,6 +175,19 @@ class GBParams:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+MEMBRANE_PERIODIC_PB_DEFAULTS: dict[str, Any] = {
+    "ipb": 1,
+    "bcopt": 10,
+    "nfocus": 1,
+    "solvopt": 2,
+    "fillratio": 1.25,
+    "cutnb": 99.0,
+    "cutfd": 7.0,
+    "maxsph": 8000,
+    "maxarcdot": 15000,
+}
+
+
 class PBParams(pydantic.BaseModel):
     """Parameters for the ``&pb`` (Poisson-Boltzmann) namelist section.
 
@@ -187,6 +200,7 @@ class PBParams(pydantic.BaseModel):
     also constrains two other defaults — see :meth:`_validate_membrane_settings`.  The
     ``extra`` dict provides a forward-compatible escape hatch for keywords
     added in newer gmx_MMPBSA versions.
+
     See https://valdes-tresanco-ms.github.io/gmx_MMPBSA/dev/input_file/#pb
     for the full reference.
     """
@@ -264,6 +278,13 @@ class PBParams(pydantic.BaseModel):
           in the gmx_MMPBSA docs all use ``eneopt=1``.
         * ``emem`` must satisfy ``indi <= emem < exdi``, per the docs for
           the membrane dielectric constant.
+        * ``ipb=2`` (this class's default) is rejected by sander's PB solver
+          at runtime for a membrane run; ``ipb=1`` in turn requires
+          ``bcopt=10`` (periodic boundary), which itself requires
+          ``nfocus=1`` -- all confirmed as real "PB Bomb" rejections.
+        * ``fillratio=4.0`` (the default) OOM-kills sander under the
+          periodic solver regardless of system size; the official
+          ``Protein_membrane`` example uses ``fillratio=1.25``.
         """
         if not self.memopt:
             return self
@@ -274,6 +295,27 @@ class PBParams(pydantic.BaseModel):
         if not (self.indi <= self.emem < self.exdi):
             raise ValueError(
                 f"pb.emem ({self.emem}) must satisfy indi <= emem < exdi ({self.indi} <= emem < {self.exdi})."
+            )
+        if self.ipb != 1:
+            raise ValueError(
+                f"pb.ipb={self.ipb} is unsupported with pb.memopt=1; sander's PB solver requires ipb=1 for a "
+                'membrane run ("membrane SAS and SES are only compatible with ipb=1").'
+            )
+        if self.bcopt != 10:  # noqa: PLR2004
+            raise ValueError(
+                f"pb.bcopt={self.bcopt} is unsupported with pb.memopt=1; sander's PB solver requires bcopt=10 "
+                '("membrane setup is only compatible with the periodic boundary").'
+            )
+        if self.nfocus != 1:
+            raise ValueError(
+                f"pb.nfocus={self.nfocus} is unsupported with pb.bcopt=10; sander's PB solver requires nfocus=1 "
+                '("bcopt=10 can be used only with nfocus=1").'
+            )
+        if self.fillratio >= 4.0:  # noqa: PLR2004
+            raise ValueError(
+                f"pb.fillratio={self.fillratio} is dangerous with pb.bcopt=10 (periodic boundary): the default "
+                "4.0 caused sander to be OOM-killed in testing regardless of system size. Use a much smaller "
+                "value (the official gmx_MMPBSA membrane example uses 1.25)."
             )
         return self
 
