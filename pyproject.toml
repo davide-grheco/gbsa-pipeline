@@ -98,12 +98,17 @@ pytest-cov = ">=7.1.0,<8"
 gmx_mmpbsa = ">=1.5.0.3,<2"
 mdanalysis = ">=2.10,<3"
 
+[tool.pixi.feature.cuda.system-requirements]
+cuda = "12.4"
+
 [tool.pixi.pypi-dependencies]
 gbsa-pipeline = { path = ".", editable = true }
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
+cuda = { features = ["cuda"], solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
+
 
 [tool.pixi.tasks]
 ruff = "ruff check --config config/ruff.toml ."
