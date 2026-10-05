@@ -11,7 +11,11 @@ import BioSimSpace as BSS
 import MDAnalysis as mda
 
 from gbsa_pipeline.config import MembraneConfig
-from gbsa_pipeline.gromacs_index import identify_ligand_resname, select_receptor_and_ligand_atoms, write_index
+from gbsa_pipeline.gromacs_index import (
+    identify_ligand_resname,
+    select_receptor_and_ligand_atoms,
+    write_index,
+)
 from gbsa_pipeline.md import (
     npt_barostat_overrides,
     remove_clashing_solvent_waters,
@@ -272,7 +276,10 @@ def _stage_npt(
         system,
         work_dir=stage_dir,
         restraint=restraint,
-        params=npt_barostat_overrides(config.md),
+        params=npt_barostat_overrides(
+            config.md,
+            simulation_time_ps=config.npt_equilibration.simulation_time_ps,
+        ),
         checkpoint_path=checkpoint_path,
     )
 
