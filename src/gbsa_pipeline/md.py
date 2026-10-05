@@ -128,26 +128,48 @@ _NPT_STABILITY_PARAMS: dict[str, Any] = {
     "constraint_algorithm": "LINCS",
     "lincs_order": 4,
 }
-# Deliberate, narrow exception to the "BSS owns barostat settings" policy
-# described above: NPT equilibration must use the *same*
-# pcoupl/pcoupltype/tau_p/ref_p/compressibility as the production [md]
-# section, not BSS's own defaults. Mismatched settings are mostly harmless
-# for plain isotropic coupling, but for semiisotropic (membrane) coupling a
-# mismatch would let the box relax differently during equilibration than
-# production, leaving residual anisotropic stress. This is an explicit
-# allowlist rather than copying all of md_params so that production-only
-# fields (e.g. nsteps) never leak into the NPT equilibration stage.
-_BAROSTAT_FIELDS = ("pcoupl", "pcoupltype", "tau_p", "ref_p", "compressibility")
+# Deliberate, narrow exception to the "BSS owns NPT settings" policy
+# described above: NPT equilibration must use the *same* pressure- and
+# temperature-coupling as the production [md] section, not BSS's own
+# defaults. For semiisotropic (membrane) coupling or any thermostat other
+# than the GromacsParams default (tcoupl=no), a mismatch would let the
+# equilibration run in a different ensemble than production. Additionally,
+# modern barostats (C-rescale, Parrinello-Rahman, MTTK) require an
+# ensemble temperature at grompp time, so without the thermostat the NPT
+# stages crash immediately when a user picks any of those for production.
+#
+# This is an explicit allowlist rather than copying all of md_params so
+# that production-only fields never leak into the NPT equilibration
+# stage. nsteps for NPT is derived from the caller-supplied
+# simulation_time_ps (the user's [npt_equilibration] setting), not from
+# md_params.nsteps (which contains the production run length).
+_COUPLING_FIELDS = (
+    "pcoupl",
+    "pcoupltype",
+    "tau_p",
+    "ref_p",
+    "compressibility",
+    "tcoupl",
+    "tc_grps",
+    "tau_t",
+    "ref_t",
+)
 
 
-def npt_barostat_overrides(md_params: GromacsParams) -> GromacsParams:
-    """Return NPT stability overrides using the same barostat settings as ``[md]``.
+def npt_barostat_overrides(
+    md_params: GromacsParams,
+    simulation_time_ps: float,
+) -> GromacsParams:
+    """Return NPT stability overrides using the same coupling settings as ``[md]``.
 
-    See the ``_BAROSTAT_FIELDS`` comment above for why only the barostat
-    fields (not all of ``md_params``) are carried over.
+    See the ``_COUPLING_FIELDS`` comment above for why only the coupling
+    fields (not all of ``md_params``) are carried over, and why ``nsteps``
+    is derived from ``simulation_time_ps`` rather than ``md_params.nsteps``
+    (which is the production run length).
     """
-    barostat_fields = {field: getattr(md_params, field) for field in _BAROSTAT_FIELDS}
-    return GromacsParams(**_NPT_STABILITY_PARAMS, **barostat_fields)
+    coupling = {field: getattr(md_params, field) for field in _COUPLING_FIELDS}
+    nsteps = round(simulation_time_ps / _NPT_STABILITY_PARAMS["dt"])
+    return GromacsParams(**_NPT_STABILITY_PARAMS, **coupling, nsteps=nsteps)
 
 
 _SOLVENT_RELAX_PARAMS: dict[str, Any] = {

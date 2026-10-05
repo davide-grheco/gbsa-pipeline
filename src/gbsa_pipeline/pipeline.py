@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-import shutil
+import subprocess
 import time
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -11,7 +11,11 @@ import BioSimSpace as BSS
 import MDAnalysis as mda
 
 from gbsa_pipeline.config import MembraneConfig
-from gbsa_pipeline.gromacs_index import identify_ligand_resname, select_receptor_and_ligand_atoms, write_index
+from gbsa_pipeline.gromacs_index import (
+    identify_ligand_resname,
+    select_receptor_and_ligand_atoms,
+    write_index,
+)
 from gbsa_pipeline.md import (
     npt_barostat_overrides,
     remove_clashing_solvent_waters,
@@ -34,7 +38,6 @@ from gbsa_pipeline.solvation_box import solvate_membrane
 from gbsa_pipeline.solvation_bss import solvate_bss
 
 if TYPE_CHECKING:
-    import subprocess
     from collections.abc import Callable, Sequence
     from pathlib import Path
 
@@ -272,7 +275,10 @@ def _stage_npt(
         system,
         work_dir=stage_dir,
         restraint=restraint,
-        params=npt_barostat_overrides(config.md),
+        params=npt_barostat_overrides(
+            config.md,
+            simulation_time_ps=config.npt_equilibration.simulation_time_ps,
+        ),
         checkpoint_path=checkpoint_path,
     )
 
@@ -301,6 +307,65 @@ def _stage_production(
         params=config.md,
         checkpoint_path=checkpoint_path,
     )
+
+
+def _extract_complex_trajectory_for_mmbsa(production_dir: Path, work_dir: Path, ligand_resname: str) -> Path:
+    """Extract protein+ligand atoms from the production trajectory via gmx trjconv.
+
+    gmx_MMPBSA runs sander per frame on the Complex coordinates. For a
+    membrane system we must strip the bilayer, waters, and ions from the
+    trajectory while keeping protein and ligand in the same periodic image.
+
+    1. ``gmx make_ndx`` builds a ``Protein | <ligand>`` union group -- the
+       ligand sits after lipids/waters/ions in the full topology, so a naive
+       contiguous atom range would pick the wrong tail.
+    2. ``trjconv -pbc whole`` makes every molecule intact across periodic boundaries.
+    3. ``trjconv -pbc cluster`` with that group brings protein+ligand into the
+       same periodic image per frame, then writes only those atoms.
+    """
+    tpr = production_dir / "gromacs.tpr"
+    xtc = production_dir / "gromacs.xtc"
+    whole_xtc = work_dir / "_whole.xtc"
+    complex_ndx = work_dir / "_complex.ndx"
+    reduced_xtc = work_dir / "complex_traj.xtc"
+    complex_group = f"Protein_{ligand_resname}"
+
+    subprocess.run(  # noqa: S603
+        ["gmx", "make_ndx", "-f", str(tpr), "-o", str(complex_ndx)],  # noqa: S607
+        input=f'"Protein" | "{ligand_resname}"\nq\n',
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(  # noqa: S603
+        ["gmx", "trjconv", "-f", str(xtc), "-s", str(tpr), "-o", str(whole_xtc), "-pbc", "whole"],  # noqa: S607
+        input="System\n",
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "gmx",
+            "trjconv",
+            "-f",
+            str(whole_xtc),
+            "-s",
+            str(tpr),
+            "-n",
+            str(complex_ndx),
+            "-o",
+            str(reduced_xtc),
+            "-pbc",
+            "cluster",
+        ],
+        input=f"{complex_group}\n{complex_group}\n",
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    whole_xtc.unlink(missing_ok=True)
+    return reduced_xtc
 
 
 def _stage_mmbsa(
@@ -351,11 +416,20 @@ def _stage_mmbsa(
         gro_file, top_file = save_bss_system_to_gromacs(reduced_system, complex_prefix)
         BSS.IO.saveMolecules(str(complex_prefix), reduced_system, fileformat="pdb")
         structure_pdb = complex_prefix.with_suffix(".pdb")
-        trajectory_pdb = stage_dir / "complex_traj.pdb"
-        shutil.copy(structure_pdb, trajectory_pdb)
 
         ligand_resname = identify_ligand_resname(reduced_system._sire_object)
         _write_mmbsa_index(gro_file, ligand_resname, index_file)
+
+        # Extract the protein+ligand portion of the production trajectory so
+        # that PBSA sees every frame of production. The previous shortcut
+        # copied the final-frame PDB as a one-frame "trajectory", giving
+        # gmx_MMPBSA only 1 frame of statistics regardless of production
+        # length (SD/SEM = 0, no per-frame variance signal).
+        trajectory_xtc = _extract_complex_trajectory_for_mmbsa(
+            production_dir=production_dir,
+            work_dir=stage_dir,
+            ligand_resname=ligand_resname,
+        )
 
         mmpbsa_config = MMPBSAConfig(gb=None, pb=geometry.pb_params())
         input_file = mmpbsa_config.write(stage_dir / "mmpbsa.in")
@@ -363,7 +437,7 @@ def _stage_mmbsa(
         return run_gmx_mmpbsa_from_gromacs(
             input_file=input_file,
             complex_structure=structure_pdb,
-            trajectory=trajectory_pdb,
+            trajectory=trajectory_xtc,
             topology=top_file,
             index_file=index_file,
             receptor_group=0,

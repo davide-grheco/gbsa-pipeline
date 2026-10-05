@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 from gbsa_pipeline import md
-from gbsa_pipeline.mdp import Barostat, GromacsParams, PCoupleType, SemiisotropicValue
+from gbsa_pipeline.mdp import Barostat, GromacsParams, PCoupleType, SemiisotropicValue, Thermostat
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -474,7 +474,7 @@ def test_npt_barostat_overrides_forwards_membrane_pcoupling() -> None:
         nsteps=250_000,  # production-only; must not leak into NPT overrides
     )
 
-    overrides = md.npt_barostat_overrides(md_params)
+    overrides = md.npt_barostat_overrides(md_params, simulation_time_ps=200.0)
 
     assert overrides.pcoupl == Barostat.CRESCALE
     assert overrides.pcoupltype == PCoupleType.SEMIISOTROPIC
@@ -485,7 +485,74 @@ def test_npt_barostat_overrides_forwards_membrane_pcoupling() -> None:
 
 def test_npt_barostat_overrides_keeps_npt_stability_defaults() -> None:
     """Non-barostat NPT stability overrides (dt, LINCS, constraints) are preserved."""
-    overrides = md.npt_barostat_overrides(GromacsParams())
+    overrides = md.npt_barostat_overrides(GromacsParams(), simulation_time_ps=200.0)
 
     assert overrides.dt == 0.002
     assert overrides.constraints == "h-bonds"
+
+
+def test_npt_barostat_overrides_forwards_thermostat() -> None:
+    """npt_barostat_overrides() carries the [md] thermostat into the NPT stages.
+
+    Modern barostats (C-rescale, Parrinello-Rahman, MTTK) require an ensemble
+    temperature at grompp time, so a bare _NPT_STABILITY_PARAMS that leaves
+    tcoupl at the GromacsParams default (tcoupl=NO) made Stage 6 fail with
+    "Can not use the C-rescale barostat without an ensemble temperature".
+    The NPT override must therefore propagate tcoupl / tc_grps / tau_t / ref_t
+    from the [md] section, exactly like the barostat fields.
+    """
+    md_params = GromacsParams(
+        tcoupl=Thermostat.VRESCALE,
+        tc_grps="System",
+        tau_t=0.5,
+        ref_t=310.0,
+        pcoupl=Barostat.CRESCALE,
+        pcoupltype=PCoupleType.SEMIISOTROPIC,
+        ref_p=SemiisotropicValue(1.0, 1.0),
+        compressibility=SemiisotropicValue(4.5e-5, 4.5e-5),
+    )
+
+    overrides = md.npt_barostat_overrides(md_params, simulation_time_ps=200.0)
+
+    assert overrides.tcoupl == Thermostat.VRESCALE
+    assert overrides.tc_grps == "System"
+    assert overrides.tau_t == 0.5
+    assert overrides.ref_t == 310.0
+
+
+def test_npt_barostat_overrides_derives_nsteps_from_simulation_time() -> None:
+    """Nsteps for NPT comes from simulation_time_ps, not from md_params.nsteps.
+
+    _NPT_STABILITY_PARAMS has no nsteps entry, so without the explicit
+    derivation the pydantic default (500) silently replaced BSS's
+    runtime-based nsteps and every NPT stage ran 500 * dt = 1 ps regardless
+    of the user's [npt_equilibration].simulation_time_ps setting.
+    """
+    md_params = GromacsParams(nsteps=10_000_000)  # production length
+
+    overrides = md.npt_barostat_overrides(md_params, simulation_time_ps=200.0)
+
+    # dt comes from _NPT_STABILITY_PARAMS (0.002 ps); 200.0 / 0.002 = 100_000
+    assert overrides.nsteps == 100_000
+    assert overrides.nsteps != 10_000_000  # production nsteps must not leak
+    assert overrides.nsteps != 500  # pydantic default must not leak
+
+
+def test_npt_barostat_overrides_renders_barostat_with_thermostat() -> None:
+    """A regression lock for the primary motivation.
+
+    If a future refactor removes tcoupl from _COUPLING_FIELDS, this test
+    will catch the regression before the first user crashes in grompp.
+    """
+    md_params = GromacsParams(
+        pcoupl=Barostat.CRESCALE,
+        tcoupl=Thermostat.VRESCALE,
+        ref_t=300.0,
+    )
+
+    overrides = md.npt_barostat_overrides(md_params, simulation_time_ps=200.0)
+
+    # Both coupling flavours must coexist in the rendered MDP.
+    mdp_text = overrides.to_mdp()
+    assert "pcoupl = C-rescale" in mdp_text
+    assert "tcoupl = v-rescale" in mdp_text
