@@ -48,7 +48,7 @@ def test_run_pipeline_membrane_end_to_end(tmp_path: Path) -> None:
         minimization=MinimizationConfig(nsteps=10000),
         equilibration=EquilibrationConfig(simulation_time_ps=2.0),
         npt_equilibration=NptConfig(simulation_time_ps=2.0),
-        md=GromacsParams(nsteps=100, dt=0.001),
+        md=GromacsParams(nsteps=100, dt=0.001, nstxout_compressed=10),
     )
 
     output_dir = tmp_path / "run"
